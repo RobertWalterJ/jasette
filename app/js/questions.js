@@ -11,6 +11,7 @@ import { t, sub } from './strings.js';
 import { unlock } from './speech.js';
 import { playWord, playSentence, playCanadian, stopAudio, wordClip } from './audio.js';
 import { asrSupported, listenFor, matches } from './asr.js';
+import { hintFor, tipNode } from './help.js';
 import { S, voicePref, wordNode, plainWord, articleFor, playBtn, wordVoices, sentenceBtn, sentenceBlock, wordCard, voiceNote, readBtn, lab, fillSentence, segmentsAround, choices, afterCard, ipaLine, creditLine, qcIcon } from './parts.js';
 
 const prompt = (key, extra = null) => h('p', { class: 'prompt' }, lab(key), extra);
@@ -18,6 +19,13 @@ const SKILL_ICON = { listening: 'ear', speaking: 'mic', reading: 'eye', writing:
 export const skillChip = (skill) => h('span', { class: 'skill' }, h('span', { html: ICON[SKILL_ICON[skill]] || '' }), t(skill));
 
 export function renderQuestion(it, ctx) {
+  const el = renderKind(it, ctx);
+  const tip = hintFor(it.k);
+  const p = el.querySelector?.('.prompt');
+  if (tip && p) p.after(tipNode(tip));
+  return el;
+}
+function renderKind(it, ctx) {
   switch (it.k) {
     case 'word-read': return wordRead(it, ctx);
     case 'word-listen': return wordListen(it, ctx);

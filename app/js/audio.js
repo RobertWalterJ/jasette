@@ -27,11 +27,45 @@ export async function loadAudioIndex() {
     const r = await fetch(window.JASETTE_AUDIO_INDEX || 'data/audio.json');
     if (!r.ok) return;
     const j = await r.json();
-    index = { w: new Set(j.w || []), s: new Set((j.s || []).map(String)) };
+    index = { w: new Set(j.w || []), s: new Set((j.s || []).map(String)), bytes: j.bytes || null };
   } catch { /* the app works without it: everything is then fetched remotely */ }
 }
 export const bundledCount = () => index.w.size + index.s.size;
+export const bundledBytes = () => index.bytes || { core: 0, bundled: 0 };
+
+// The tier of a bundled clip — the same rule as build/lib/tiers.mjs and sw.js (build/test-budget.mjs
+// checks the three agree). Core: the commonest 1,500 words and the Québec track.
+export const CORE_RANK = 1500;
+export const tierOf = (path) => {
+  const m = /\/audio\/w\/(?:fr|qc)-(\d+)\.mp3$/.exec(path);
+  if (m) return +m[1] <= CORE_RANK ? 'core' : 'bundled';
+  if (/\/audio\/w\/q-[^/]+\.mp3$/.test(path)) return 'core';
+  if (/\/audio\/s\/\d+\.mp3$/.test(path)) return 'bundled';
+  return 'remote';
+};
+
+// Talk to the service worker that owns the audio caches. Null where there is none (a first
+// visit before it has taken control, or a browser that will not run one).
+async function swCall(msg) {
+  const reg = await navigator.serviceWorker?.getRegistration?.().catch(() => null);
+  const sw = reg?.active;
+  if (!sw) return null;
+  return new Promise((ok) => { const ch = new MessageChannel(); ch.port1.onmessage = (e) => ok(e.data); sw.postMessage(msg, [ch.port2]); setTimeout(() => ok(null), 5000); });
+}
+export const storageUsage = () => swCall({ type: 'usage' });
+export const setStorageCap = (bytes) => swCall({ type: 'budget', cap: bytes });
+export const purgeOther = () => swCall({ type: 'purge' });
+export const osStorage = async () => { try { return await navigator.storage?.estimate?.(); } catch { return null; } };
+// Fetch every URL (the worker keeps what it is given), four at a time, never faster.
+export async function fetchAll(urls, onProgress) {
+  const q = urls.slice();
+  let n = 0, fail = 0;
+  const worker = async () => { while (q.length) { const u = q.shift(); try { const r = await fetch(u); if (!r.ok) fail++; else await r.arrayBuffer(); } catch { fail++; } onProgress?.(++n); } };
+  await Promise.all([worker(), worker(), worker(), worker()]);
+  return { n, fail };
+}
 export const allBundledUrls = () => [...[...index.w].map((n) => BASE + 'w/' + n), ...[...index.s].map((id) => `${BASE}s/${id}.mp3`)];
+export const coreUrls = () => allBundledUrls().filter((u) => tierOf(u) === 'core');
 
 export const slug = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const enc = (s) => encodeURIComponent(s.replace(/ /g, '_')).replace(/[()'*!]/g, (c) => '%' + c.charCodeAt(0).toString(16).toUpperCase());

@@ -5,11 +5,17 @@ import { State, shuffle } from './schedule.js';
 import { D, examplesOf } from './deck.js';
 import { unlock, say, available as speechAvailable } from './speech.js';
 import { playWord, playSentence, playCanadian, stopAudio, wordClip, canadianClip } from './audio.js';
-import { t, sub, gloss } from './strings.js';
+import { t, sub, gloss, STRINGS } from './strings.js';
+import { reassurance } from './help.js';
 
 export const S = () => State.data.settings;
 // A phrase of the interface: the French, with its English beneath while it is still new to you,
 // and always in the tooltip (long-press) once the English has gone quiet.
+// The same, but the English is always there: for the level check, where the instructions must be understood.
+export function labFull(key, v) {
+  const e = STRINGS[key];
+  return h('span', { class: 'lab', title: e ? e[1] : null }, t(key, v), e ? h('small', { class: 'sub' }, e[1]) : null);
+}
 export function lab(key, v) {
   const s = sub(key, v);
   return h('span', { class: 'lab', title: gloss(key, v) || null }, t(key, v), s ? h('small', { class: 'sub' }, s) : null);
@@ -234,7 +240,7 @@ export function afterCard(kids, { onNext, ok = null, answer = null }) {
   const verdict = ok === null ? null : h('p', { class: 'verdict ' + (ok ? 'right' : 'wrong'), role: 'status' },
     h('span', { class: 'mark', 'aria-hidden': 'true' }, ok ? '✓' : '✗'),
     h('span', {}, ok ? lab('right') : lab('notQuite'), !ok && answer ? h('span', { class: 'vans' }, h('b', {}, typo(answer))) : null));
-  return h('div', { class: 'after' }, verdict, ...[].concat(kids).filter(Boolean),
+  return h('div', { class: 'after' }, verdict, ok === false ? reassurance() : null, ...[].concat(kids).filter(Boolean),
     h('div', { class: 'dock' }, h('button', { class: 'btn primary wide', type: 'button', onclick: onNext }, lab('next'))));
 }
 

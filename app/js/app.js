@@ -12,13 +12,15 @@
 
 import { h, typo, ICON, iconBtn, sheet, closeSheet, show, route, back, onScreen, currentScreen, repaint, flash, toast, setLeaveGuard } from './ui.js';
 import { initSpeech, unlock, onSpeaking, frVoiceInfo, frAvailable } from './speech.js';
-import { loadAudioIndex, onAudio, allBundledUrls, bundledCount, stopAudio } from './audio.js';
+import { loadAudioIndex, onAudio, stopAudio } from './audio.js';
+import { storageCard } from './storage.js';
 import { State, Round, cardState, dayKey, newLeftToday, now, DAY, shuffle } from './schedule.js';
 import { loadDeck, indexDeck, D, SKILL, allIds } from './deck.js';
 import { t, sub, setMode, setUi, resetFade, fadeStats } from './strings.js';
 import { press as tick, right as correct, wrong, setSound as setSoundOn } from './sound.js';
 import { asrSupported } from './asr.js';
-import { S, wordNode, wordCard, playBtn, wordVoices, sentenceBlock, qcIcon, voicePref, afterCard, choices, lab } from './parts.js';
+import { S, wordNode, wordCard, playBtn, wordVoices, sentenceBlock, qcIcon, voicePref, afterCard, choices, lab, labFull } from './parts.js';
+import { GUIDE, hintFor, tipNode } from './help.js';
 import { renderQuestion, skillChip } from './questions.js';
 import { SITTINGS, PACES, sitting, pace, noSpeaking, course, floorStage, inPlay, wordStates, isMet, likelyKnown } from './core.js';
 import { Placement, BANDS } from './placement.js';
@@ -48,8 +50,27 @@ function applyLook() {
   setMode(s.lang || 'fade');
   setUi(State.data.ui || (State.data.ui = { seen: {} }), { quick: (State.data.placement?.size || 0) >= 2500 });
   el.lang = s.lang === 'en' ? 'en-CA' : 'fr-CA';
+  el.setAttribute('translate', 'no');
 }
 mq?.addEventListener?.('change', () => { applyLook(); });
+
+// ── how it works, in English ─────────────────────────────────────────────
+function guideSheet() {
+  sheet(
+    h('h2', {}, 'How Jasette works'),
+    h('p', { class: 'note' }, 'Comment ça marche'),
+    ...GUIDE.map(([title, text]) => h('div', { style: 'margin:14px 0' }, h('h3', { style: 'font-size:1.02rem;margin-bottom:4px' }, title), h('p', { style: 'margin:0' }, text))),
+    h('button', { class: 'btn primary wide', type: 'button', onclick: closeSheet }, t('gotIt')));
+}
+const welcomeCard = () => h('section', { class: 'card welcome' },
+  h('p', { class: 'eyebrow' }, 'Welcome — Bienvenue'),
+  h('h2', { style: 'font-size:1.35rem;margin-bottom:8px' }, 'Let’s find where you are'),
+  h('p', {}, 'You already know some French. Jasette finds out how much, then helps you keep it and grow it. Menus are in French with English underneath — the English fades as you get used to it.'),
+  h('ol', { class: 'steps' },
+    h('li', {}, h('b', {}, 'Take the level check. '), 'About 30 words, five minutes, no timer. Tap the English meaning — or “Je ne sais pas” if you don’t know. That’s fine.'),
+    h('li', {}, h('b', {}, 'Then do a round a day. '), 'About 40 short questions. Each one tells you how to answer it.'),
+    h('li', {}, h('b', {}, 'Wrong answers are normal. '), 'They come back on a later day until they stick.')),
+  h('button', { class: 'btn ghost wide', type: 'button', onclick: guideSheet }, 'How it all works'));
 
 // ── installing it ────────────────────────────────────────────────────────
 // Chrome offers an install prompt only when it decides to, and its own menu can refuse
@@ -215,7 +236,9 @@ function homeScreen() {
           h('button', { class: 'mini', type: 'button', onclick: () => startRound({ practice: true }), disabled: met < 12 }, h('span', { html: ICON.repeat }), t('recall'), h('small', {}, t('recallNote'))),
           h('button', { class: 'mini', type: 'button', onclick: () => show('placement') }, h('span', { html: ICON.sparkle }), t('findLevel'), h('small', {}, State.data.placement ? `≈ ${State.data.placement.size.toLocaleString('fr-CA')} mots au dernier test` : t('findLevelNote')))) : null,
         outLoudSwitch(),
+        !first ? h('button', { class: 'link', type: 'button', style: 'display:block;margin:12px auto 0', onclick: guideSheet }, 'How it works · Comment ça marche') : null,
         run > 1 ? h('p', { class: 'note', style: 'margin:12px 0 0' }, h('span', { html: ICON.flame, style: 'display:inline-flex;width:16px;vertical-align:-3px;color:var(--accent2)' }), ` ${run} ${t('daysRun')}`) : null),
+      first ? welcomeCard() : null,
       installCard(),
       !frAvailable() ? h('section', { class: 'card flat' }, h('p', { class: 'note' }, 'Ce téléphone n’a pas de voix française. Les mots et phrases enregistrés se jouent quand même ; les autres questions d’écoute sont mises de côté.')) : null,
       word ? h('section', { class: 'card' },
@@ -357,26 +380,35 @@ function placementScreen() {
   const leave = () => show('today');
   const bar = h('div', { class: 'roundbar' }, iconBtn('close', t('close'), leave), h('div', { class: 'progress' }, prog), h('span', { class: 'note' }, ''));
   const intro = () => box.replaceChildren(h('section', { class: 'card' },
-    h('p', { class: 'eyebrow' }, t('findLevel')),
-    h('h2', {}, lab('whereAreYou')),
-    h('p', {}, 'Une trentaine de mots, des plus courants aux plus rares. Réponds à ceux que tu connais ; touche « Je ne sais pas » pour les autres, sans te forcer. On en tire une estimation, et on ne te redemandera pas ce que tu sais déjà.'),
-    h('p', { class: 'note' }, 'Aucun chrono. Environ cinq minutes.'),
-    h('button', { class: 'btn primary wide', type: 'button', onclick: ask }, t('start'))));
+    h('p', { class: 'eyebrow' }, labFull('findLevel')),
+    h('h2', {}, 'Where do you stand?'),
+    h('p', {}, 'You’ll see about 30 French words, from very common to quite rare. For each one, tap its English meaning.'),
+    h('p', {}, h('b', {}, 'Don’t know it? Tap “Je ne sais pas” (I don’t know).'), ' That is completely fine. Nothing is marked against you: a word you miss is simply a word to learn, and it will come back in a later round — possibly in a different kind of question — until it sticks. Please don’t look anything up; a wrong or missing answer helps the app place you properly.'),
+    h('p', { class: 'note' }, 'There is no timer. It takes about five minutes. At the end you’ll see an estimate of your vocabulary and where your course will start.'),
+    h('button', { class: 'btn primary wide', type: 'button', onclick: ask }, labFull('start'))));
   const ask = () => {
     if (pl.finished) { conclude(); return; }
     const it = pl.pickItem();
     if (!it) { pl.finished = true; conclude(); return; }
     const w = D().words[it.i];
     prog.style.width = `${Math.min(100, (pl.total / pl.maxQuestions) * 100)}%`;
-    const c = h('section', { class: 'card qcard' }, skillChip('reading'), h('p', { class: 'prompt' }, t('pMean')), h('p', { class: 'bigword' }, wordNode(w)));
+    const c = h('section', { class: 'card qcard' }, skillChip('reading'), h('p', { class: 'prompt' }, labFull('pMean')), h('p', { class: 'tip' }, 'Tap the English meaning of this French word. If you don’t know it, tap “Je ne sais pas” below — that’s fine.'), h('p', { class: 'bigword' }, wordNode(w)));
     const answer = (ok) => {
       pl.record(it, ok);
       State.answer(it.id, ok, { known: ok });
       (ok ? correct : wrong)();
-      setTimeout(ask, ok ? 350 : 700);
+      // Right: straight on. Wrong or "I don't know": show what it means and wait for a tap — the
+      // check should teach as well as measure, and nothing here moves on while there is something to read.
+      if (ok) { setTimeout(ask, 350); return; }
+      box.replaceChildren(h('section', { class: 'card qcard' },
+        h('p', { class: 'eyebrow' }, 'That one means…'),
+        wordCard(it.i, { example: false }),
+        h('p', { class: 'tip soft' }, 'No problem — that’s what the check is for. This word will come back in a later round, so you’ll get another go.'),
+        h('div', { class: 'dock' }, h('button', { class: 'btn primary wide', type: 'button', onclick: ask }, labFull('next')))));
+      window.scrollTo(0, 0);
     };
     const ch = choices(it.options, w.g, (ok) => { dk.remove(); answer(ok); });
-    const dk = h('button', { class: 'btn ghost wide', type: 'button', style: 'margin-top:12px', onclick: () => { ch.classList.add('locked'); dk.remove(); answer(false); } }, t('dontKnow'));
+    const dk = h('button', { class: 'btn ghost wide', type: 'button', style: 'margin-top:12px', onclick: () => { ch.classList.add('locked'); dk.remove(); answer(false); } }, labFull('dontKnow'));
     c.append(ch, dk);
     box.replaceChildren(c);
     window.scrollTo(0, 0);
@@ -388,13 +420,14 @@ function placementScreen() {
     State.save();
     const d = D();
     box.replaceChildren(h('section', { class: 'card' },
-      h('p', { class: 'eyebrow' }, lab('result')),
-      h('p', { class: 'bignum' }, `≈ ${res.size.toLocaleString('fr-CA')}`),
-      h('p', {}, 'mots, d’après tes réponses. C’est une estimation à quelques centaines près, pas une mesure.'),
-      res.floor ? h('p', {}, `On part de l’étape ${res.floor + 1} : « ${d.stages[Math.min(res.floor, d.stages.length - 1)].title} ». Ce qui est avant, on ne te le pose que de temps en temps, pour vérifier.`) : h('p', {}, 'On commence par le début, et ça ira vite : tout ce que tu sais déjà passe en révision espacée dès la première bonne réponse.'),
+      h('p', { class: 'eyebrow' }, labFull('result')),
+      h('p', { class: 'bignum' }, `≈ ${res.size.toLocaleString('en-CA')}`),
+      h('p', {}, 'words, going by your answers — an estimate to within a few hundred, not a measurement.'),
+      res.floor ? h('p', {}, `Your course starts at stage ${res.floor + 1}: “${d.stages[Math.min(res.floor, d.stages.length - 1)].title}” (${d.stages[Math.min(res.floor, d.stages.length - 1)].en}). The stages before it are assumed known; you’ll only get an occasional quick check from them, to keep that honest.`) : h('p', {}, 'The course starts at the beginning — and it will move quickly: anything you already know goes straight into spaced review the first time you get it right.'),
+      h('p', { class: 'note' }, 'Every word you missed is now on its way back: you’ll see it again in a later round.'),
       h('div', { class: 'meter' }, h('i', { style: `width:${Math.min(100, (res.size / d.words.length) * 100)}%` })),
       h('p', { class: 'note' }, `Sur les ${d.words.length.toLocaleString('fr-CA')} mots de la liste.`),
-      h('button', { class: 'btn primary wide', type: 'button', onclick: () => show('today') }, t('start'))));
+      h('button', { class: 'btn primary wide', type: 'button', onclick: () => show('today') }, labFull('start'))));
   };
   intro();
   return [bar, box];
@@ -415,20 +448,6 @@ function settingsScreen() {
       s[key] = val; State.save(); for (const b of wrap.children) b.setAttribute('aria-pressed', 'false'); wrap.querySelector(`[data-v="${val}"]`).setAttribute('aria-pressed', 'true'); onchange?.(val);
     }, 'data-v': val }, label));
     return wrap;
-  };
-  const dl = h('div', {});
-  const downloadAll = async (btn) => {
-    const urls = allBundledUrls();
-    if (!urls.length) { toast('Aucun enregistrement n’est fourni avec cette copie.'); return; }
-    btn.disabled = true;
-    const bar = h('div', { class: 'dlbar' }, h('i')); const txt = h('p', { class: 'note' }, '');
-    dl.append(bar, txt);
-    let n = 0, fail = 0;
-    const q = urls.slice();
-    const worker = async () => { while (q.length) { const u = q.shift(); try { const r = await fetch(u); if (!r.ok) fail++; else await r.arrayBuffer(); } catch { fail++; } n++; bar.firstChild.style.width = `${(n / urls.length) * 100}%`; txt.textContent = `${n} / ${urls.length}`; } };
-    await Promise.all([worker(), worker(), worker(), worker()]);
-    txt.textContent = fail ? `Terminé : ${urls.length - fail} gardés, ${fail} introuvables.` : `Terminé : les ${urls.length} enregistrements sont gardés sur ce téléphone.`;
-    btn.disabled = false;
   };
   const vi = frVoiceInfo();
   return [header(t('settings'), { backBtn: true }), h('main', {},
@@ -462,11 +481,9 @@ function settingsScreen() {
       h('div', { style: 'display:grid;gap:10px;margin-top:10px' },
         h('button', { class: 'btn wide', type: 'button', onclick: backupProgress }, h('span', { html: ICON.download }), t('saveCopy')),
         h('label', { class: 'btn wide', style: 'cursor:pointer' }, t('restore'), h('input', { type: 'file', accept: 'application/json,.json', style: 'display:none', onchange: (e) => { const f = e.target.files?.[0]; if (f) restoreProgress(f, (m) => toast(m, 4200)); } })))),
-    h('section', { class: 'card' },
-      h('h2', { style: 'font-size:1.2rem;margin-bottom:8px' }, lab('offline')),
-      h('p', { class: 'note' }, `${bundledCount().toLocaleString('fr-CA')} enregistrements sont fournis avec l’app. Ils se gardent d’eux-mêmes quand tu les écoutes ; ce bouton les prend tous d’un coup, pour travailler sans réseau.`),
-      h('button', { class: 'btn wide', type: 'button', style: 'margin-top:8px', onclick: (e) => downloadAll(e.currentTarget) }, h('span', { html: ICON.download }), t('downloadAudio')), dl),
+    storageCard(),
     standalone() || State.data.installed ? h('p', { class: 'note centre' }, '✓ ', t('installed')) : h('button', { class: 'btn wide', type: 'button', style: 'margin-bottom:10px', onclick: installApp }, h('span', { html: ICON.download }), t('install')),
+    h('button', { class: 'btn ghost wide', type: 'button', style: 'margin-bottom:10px', onclick: guideSheet }, 'How Jasette works · Comment ça marche'),
     h('button', { class: 'btn ghost wide', type: 'button', onclick: () => show('about') }, t('about')),
     h('p', { class: 'note centre', style: 'margin-top:16px' }, `Version ${VERSION.v}${VERSION.date ? ` · ${VERSION.date}` : ''}${VERSION.commit ? ` · ${VERSION.commit}` : ''}. Rien n’est envoyé nulle part, pas même ce que dit le microphone.`))];
 }

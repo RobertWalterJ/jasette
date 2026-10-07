@@ -33,8 +33,26 @@ mkdirSync(join(OUT, 'data'), { recursive: true });
 mkdirSync(join(OUT, 'icons'), { recursive: true });
 if (design) writeFileSync(join(OUT, 'design.html'), design);
 
-// the recordings index must be current
-execFileSync(process.execPath, [join(ROOT, 'build', 'audio-index.mjs')], { stdio: 'inherit' });
+// THE AUDIO THAT SHIPS. Sentence clips all go. A word clip goes only if the provenance manifest
+// (build/fetch-audio.mjs, build/audit-audio.mjs) confirms it is the recording of the word the deck
+// says it is — a clip whose rank has shifted would play the wrong word, and the app would stream
+// the right one instead. Then the index the app reads is made from what actually shipped.
+const srcAudio = join(APP, 'audio');
+if (existsSync(srcAudio)) {
+  const mf = existsSync(join(srcAudio, 'w', '_manifest.json')) ? JSON.parse(readFileSync(join(srcAudio, 'w', '_manifest.json'), 'utf8')) : {};
+  const plan = JSON.parse(readFileSync(join(ROOT, 'build', '_audio-plan.json'), 'utf8'));
+  const slug = (x) => String(x).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const expect = new Map(plan.words.map((w) => [w.q ? 'q-' + slug(w.q) + '.mp3' : w.a + '-' + (w.i + 1) + '.mp3', w.f]));
+  mkdirSync(join(OUT, 'audio', 'w'), { recursive: true });
+  let shipped = 0, held = 0;
+  for (const n of readdirSync(join(srcAudio, 'w'))) {
+    if (!n.endsWith('.mp3')) continue;
+    if (mf[n] && mf[n] === expect.get(n)) { cpSync(join(srcAudio, 'w', n), join(OUT, 'audio', 'w', n)); shipped++; } else held++;
+  }
+  if (existsSync(join(srcAudio, 's'))) cpSync(join(srcAudio, 's'), join(OUT, 'audio', 's'), { recursive: true });
+  console.log('word recordings: ' + shipped + ' confirmed and shipped, ' + held + ' held back (unverified, they stream instead)');
+}
+execFileSync(process.execPath, [join(ROOT, 'build', 'audio-index.mjs'), 'docs'], { stdio: 'inherit' });
 
 const pkg = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8'));
 let commit = 'local';
@@ -57,9 +75,10 @@ writeFileSync(join(OUT, cssName), css);
 const deck = readFileSync(join(APP, 'data', 'deck.json'));
 const deckName = `data/deck.${hash(deck)}.json`;
 writeFileSync(join(OUT, deckName), deck);
-const aidx = readFileSync(join(APP, 'data', 'audio.json'));
+const aidx = readFileSync(join(OUT, 'data', 'audio.json'));
 const aidxName = `data/audio.${hash(aidx)}.json`;
 writeFileSync(join(OUT, aidxName), aidx);
+rmSync(join(OUT, 'data', 'audio.json'));
 // fonts and icons
 cpSync(join(APP, 'fonts'), join(OUT, 'fonts'), { recursive: true });
 for (const f of ['icon-192.png', 'icon-512.png', 'icon-maskable-512.png', 'apple-touch-icon.png']) cpSync(join(APP, 'icons', f), join(OUT, 'icons', f));
@@ -75,8 +94,6 @@ sub('<script type="module" src="js/app.js"></script>', `<script>window.JASETTE_B
 if (/(href|src)="\/(?!\/)/.test(html)) throw new Error('a root-absolute URL would break under /jasette/');
 writeFileSync(join(OUT, 'index.html'), html);
 
-// the audio that ships
-if (existsSync(join(APP, 'audio'))) cpSync(join(APP, 'audio'), join(OUT, 'audio'), { recursive: true });
 
 // the service worker, with the build in its name and the hashed files in its shell
 let sw = readFileSync(join(APP, 'sw.js'), 'utf8');
