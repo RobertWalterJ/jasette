@@ -25,7 +25,7 @@ export const itemById = (id) => deck.byId.get(id);
 export const SKILL = {
   'word-listen': 'listening', 'sentence-listen': 'listening', 'sound-pair': 'listening', 'qc-listen': 'listening',
   'word-say': 'speaking', 'word-pick': 'speaking', 'sentence-repeat': 'speaking', 'sentence-say': 'speaking',
-  'word-read': 'reading', 'note-pick': 'reading', 'idiom-mean': 'reading', 'dialogue': 'speaking',
+  'word-read': 'reading', 'note-pick': 'reading', 'idiom-mean': 'reading', 'match-pairs': 'reading', 'dialogue': 'speaking',
   'spell-pick': 'writing', 'homophone-pick': 'writing',
   'word-cloze': 'grammar', 'fill-multi': 'grammar', 'gender-pick': 'grammar', 'conj-pick': 'grammar', 'conj-drill': 'grammar', 'conj-row': 'grammar', 'conj-across': 'grammar', 'aux-pick': 'grammar', 'agree-pick': 'grammar',
   'pronoun-pick': 'grammar', 'grammar-build': 'grammar',
@@ -58,6 +58,7 @@ export function indexDeck() {
     if (it.q != null) return 'q' + it.q;
     if (it.x != null) return 'x' + it.x;                       // an expression
     if (it.d != null) return 'd' + it.d;                       // a dialogue
+    if (it.ws) return 'm' + it.id;                             // a matching game (five words at once)
     if (it.gid) return 'g' + it.gid + (it.sid ? '/' + it.sid : '');
     if (it.choices) return 's' + it.id;
     return 's' + it.id;
@@ -129,7 +130,7 @@ const SUPPLY = 220;
 const GATED = new Set(['word-listen', 'word-pick', 'word-cloze', 'word-say', 'spell-pick', 'gender-pick']);
 export function askableIds({ canSound = true, current = Infinity, floor = 0, met = () => false, wordMet = () => false, unlocked = () => true, noSpeaking = false } = {}) {
   // (a dialogue is played on its own screen, never in an ordinary round)
-  const ok = (it) => askable(it, canSound, noSpeaking) && it.k !== 'dialogue' && (!isDrill(it) || met(it.id)) && (met(it.id) || !(GATED.has(it.k) && it.i != null) || unlocked(it.i) || (it.stage != null && it.stage < floor));
+  const ok = (it) => askable(it, canSound, noSpeaking) && it.k !== 'dialogue' && (it.k !== 'match-pairs' || it.ws.every(wordMet)) && (!isDrill(it) || met(it.id)) && (met(it.id) || !(GATED.has(it.k) && it.i != null) || unlocked(it.i) || (it.stage != null && it.stage < floor));
   const tail = deck.stages.length;
   const opensAt = (it) => (met(it.id) ? 0 : it.stage != null ? it.stage : tail);
   let horizon = current;

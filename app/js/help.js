@@ -21,6 +21,8 @@ export const HINTS = {
   'idiom-mean': 'Some phrases do not mean what their words say. Tap what this one really means. Whether you get it right or not, you will then see why it means that.',
   'sentence-repeat': 'Listen to the recording, then say the sentence out loud. The phone can listen and tell you which words it caught, if you let it. Show the words if you want to see them as you say them.',
   'sentence-say': 'Here is the English. Say the sentence in French out loud, from memory. Then you will see and hear the French. If the phone is listening it will tell you which words it caught.',
+  'conj-spot': 'Three lines show the same verb in the same tense, and one of them is wrong. Tap the wrong one. Then you will see the whole pattern.',
+  'match-pairs': 'Five French words and five English meanings. Tap a French word, then the meaning it matches (or the other way round). A right pair locks with a ✓; a wrong tap shows a ✗ and you try again. You can have one wrong and still count it as right.',
   'conj-row': 'One verb, one tense, every person. Tap each form into its line, from je down to ils, then tap Vérifier (Check).',
   'conj-across': 'One verb and one person, across the tenses. Tap each form into its line (present, past, imperfect, future, conditional, subjunctive), then tap Vérifier (Check).',
   'conj-drill': 'You are given a verb, a tense and a pronoun. Tap the form of the verb that goes with that pronoun in that tense. After you answer you will see the whole pattern.',

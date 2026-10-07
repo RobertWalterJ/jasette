@@ -476,3 +476,26 @@ details.more { margin: var(--s3) 0; } details.more summary { cursor: pointer; fo
 .said .miss { text-decoration: underline wavy; text-underline-offset: 4px; font-weight: 700; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .sentence-fill.lines { white-space: pre-line; line-height: 2.3; }
+
+/* conversations */
+.chat { display: flex; flex-direction: column; gap: var(--s3); margin: var(--s3) 0; }
+.bubble { max-width: 88%; padding: var(--s3) var(--s4); border-radius: var(--radius); border: 1px solid var(--line); background: var(--chip); }
+.bubble.you { align-self: flex-end; background: var(--card); border-color: var(--accent); }
+.bubble.other { align-self: flex-start; }
+.bubble .who { display: block; font-size: .72rem; font-weight: 800; color: var(--muted); letter-spacing: .02em; margin-bottom: 2px; }
+.bubble p { margin: 0; } .bubble .fr { font-family: var(--fr); font-size: 1.1rem; }
+.row { display: flex; gap: var(--s2); flex-wrap: wrap; }
+.recap { margin: 4px 0; display: flex; gap: 8px; align-items: baseline; }
+
+/* matching pairs */
+.mgrid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); margin: var(--s3) 0; }
+.mcol { display: flex; flex-direction: column; gap: var(--s2); }
+.mbtn { position: relative; min-height: 54px; padding: var(--s2) var(--s3); text-align: left; font-weight: 700; border: 2px solid var(--line); border-radius: 14px; background: var(--card); color: var(--ink); }
+.mbtn.fr { font-family: var(--fr); font-size: 1.05rem; }
+.mbtn[aria-pressed="true"] { border-color: var(--accent); background: var(--tint); }
+.mbtn.matched { border-style: dashed; opacity: .65; }
+.mbtn.nope { border-color: var(--wrong, var(--accent)); }
+.mbtn .mark { position: absolute; top: 4px; right: 8px; font-weight: 800; }
+details.culture summary::after { content: " +"; font-weight: 800; color: var(--accent); }
+details.culture[open] summary::after { content: " −"; }
+details.culture[open] summary { margin-bottom: var(--s2); }

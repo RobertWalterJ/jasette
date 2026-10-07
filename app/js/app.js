@@ -25,6 +25,8 @@ import { autoRead, readQuestionButton, cancelReading, speakQueue } from './read.
 import { renderQuestion, skillChip } from './questions.js';
 import { SITTINGS, PACES, sitting, pace, noSpeaking, course, floorStage, inPlay, wordStates, isMet, likelyKnown, conjIds, conjPace, conjState, conjSize } from './core.js';
 import { conjScreen } from './conj.js';
+import { dialoguesScreen, dialogueScreen } from './dialogue.js';
+import { cultureScreen } from './culture.js';
 import { introFor, lessonCard, wordIntro, exprIntro } from './teach.js';
 import { Placement, BANDS } from './placement.js';
 import { courseScreen, wordsScreen, progressScreen, aboutScreen, wordSheet, canadianSheet } from './browse.js';
@@ -256,6 +258,8 @@ function homeScreen() {
         run > 1 ? h('p', { class: 'note', style: 'margin:12px 0 0' }, h('span', { html: ICON.flame, style: 'display:inline-flex;width:16px;vertical-align:-3px;color:var(--accent2)' }), ` ${run} ${t('daysRun')}`) : null),
       first ? welcomeCard() : null,
       !first ? speakCard() : null,
+      !first ? dialoguesCard() : null,
+      !first ? cultureCard() : null,
       !first ? conjCard() : null,
       installCard(),
       !frAvailable() ? h('section', { class: 'card flat' }, h('p', { class: 'note' }, 'Ce téléphone n’a pas de voix française. Les mots et phrases enregistrés se jouent quand même ; les autres questions d’écoute sont mises de côté.')) : null,
@@ -357,6 +361,26 @@ function speakCard() {
       h('div', { class: 'w' }, 'Écoute et répète'),
       h('div', { class: 'note' }, listening ? 'A speaker says a sentence, then the phone listens to you and marks the words.' : 'A speaker says a sentence, then you say it back. (Let the phone listen the first time it asks, and it will mark you.)')),
       h('button', { class: 'btn', type: 'button', 'aria-label': 'Parler', disabled: !n, onclick: () => startSpeakRound() }, h('span', { html: ICON.mic, style: 'display:inline-flex;width:20px' }))));
+}
+// A way into the culture notes from Today.
+function cultureCard() {
+  return h('section', { class: 'card' },
+    h('p', { class: 'eyebrow' }, 'Culture'),
+    h('div', { class: 'dayword' }, h('div', { style: 'flex:1;min-width:0' },
+      h('div', { class: 'w' }, 'Québec, Canada, France: how the French differs'),
+      h('div', { class: 'note' }, `${(D().culture || []).length} short notes, each with its sources`)),
+      h('button', { class: 'btn', type: 'button', 'aria-label': 'Culture', onclick: () => show('culture') }, h('span', { html: ICON.chev }))));
+}
+// A way into the conversations from Today.
+function dialoguesCard() {
+  const dls = D().dialogues || [];
+  const played = dls.filter((dl) => State.card('dlg/' + dl.id)).length;
+  return h('section', { class: 'card' },
+    h('p', { class: 'eyebrow' }, 'Conversations'),
+    h('div', { class: 'dayword' }, h('div', { style: 'flex:1;min-width:0' },
+      h('div', { class: 'w' }, 'Hear it, answer it, see why'),
+      h('div', { class: 'note' }, `${dls.length} short exchanges in everyday Québec situations · ${played} played`)),
+      h('button', { class: 'btn', type: 'button', 'aria-label': 'Conversations', onclick: () => show('dialogues') }, h('span', { html: ICON.chev }))));
 }
 function emptyScreen() {
   return [header('Série'), h('main', {}, h('section', { class: 'card' },
@@ -593,6 +617,9 @@ async function boot() {
   }
   route('today', homeScreen);
   route('course', courseScreen);
+  route('culture', () => cultureScreen({ header }));
+  route('dialogues', () => dialoguesScreen({ header, play: (n) => show('dialogue', { n }) }));
+  route('dialogue', ({ n } = {}) => dialogueScreen({ header, back, list: () => show('dialogues'), n }), { tabs: false });
   route('conj', () => conjScreen({ header, start: startConjRound, refresh: repaint, openLesson: (n) => sheet(lessonCard(n, () => closeSheet(), { replay: true })) }));
   route('words', wordsScreen);
   route('progress', progressScreen);
@@ -615,6 +642,32 @@ async function boot() {
       document.querySelector('main')?.replaceChildren(node);
       window.scrollTo(0, 0);
     };
+    // J.dlg(): play every dialogue through (tap the natural reply each time, then continue) and report
+    // stray text, a missing summary, or a turn with the wrong number of replies.
+    window.J.dlg = async () => {
+      const bad = [];
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      for (const [n, dl] of D().dialogues.entries()) {
+        show('dialogue', { n }); await wait(120);
+        [...document.querySelectorAll('button')].find((b) => /straight to the conversation/.test(b.textContent))?.click(); await wait(80);
+        for (let guard = 0; guard < 40; guard++) {
+          const choices = [...document.querySelectorAll('.choices .choice')];
+          if (choices.length) {
+            if (choices.length !== 3) bad.push(`${dl.id}: a turn with ${choices.length} replies`);
+            const best = dl.lines.find((l) => l.who === 'you' && choices.some((c) => c.textContent === l.best.fr.replace(/’/g, '’')));
+            (choices.find((c) => dl.lines.some((l) => l.who === 'you' && l.best.fr === c.textContent)) || choices[0]).click(); await wait(60);
+          }
+          const go = [...document.querySelectorAll('.dock button.primary')].find((b) => /Continue|Finish/.test(b.textContent));
+          if (go) { go.click(); await wait(60); continue; }
+          if (/Pourquoi/.test(document.querySelector('main')?.textContent || '')) break;
+        }
+        const text = document.querySelector('main')?.textContent || '';
+        if (!/Pourquoi/.test(text)) bad.push(`${dl.id}: never reached the summary`);
+        const stray = text.match(/\b(null|undefined|NaN)\b|\[object/);
+        if (stray) bad.push(`${dl.id}: stray text "${stray[0]}"`);
+      }
+      return { checked: D().dialogues.length, problems: bad };
+    };
     window.J.teach = () => {
       const bad = [];
       let n = 0;
@@ -636,7 +689,7 @@ async function boot() {
       const bad = [];
       let n = 0;
       for (const k of window.J.kinds()) {
-        if (k === 'dialogue') continue;                       // played on its own screen (not built yet)
+        if (k === 'dialogue') continue;                       // played on its own screen (J.dlg() plays them)
         for (const it of D().items.filter((i) => i.k === k).slice(0, per)) {
           window.J.ask(it.id); await new Promise((r) => setTimeout(r, 120));
           const card = document.querySelector('.qcard'); n++;
@@ -644,9 +697,23 @@ async function boot() {
           const stray = card.textContent.match(/\b(null|undefined|NaN)\b|\[object/);
           if (stray) bad.push(`${it.id}: stray text "${stray[0]}"`);
           if (!card.querySelector('.readq')) bad.push(`${it.id}: no read-aloud button`);
-          if (!card.querySelector('.choice, .tile, .btn, .play')) bad.push(`${it.id}: nothing to answer with`);
+          if (!card.querySelector('.choice, .tile, .btn, .play, .mbtn')) bad.push(`${it.id}: nothing to answer with`);
         }
       }
+      // the "spot the error" variation of the conjugation drills, in every simple tense
+      window.J.forceVariant = 'spot';
+      for (const tense of ['pr', 'im', 'fu', 'co', 'su']) {
+        for (const it of D().items.filter((i) => i.k === 'conj-drill' && i.tense === tense).slice(0, per)) {
+          window.J.ask(it.id); await new Promise((r) => setTimeout(r, 120));
+          const card = document.querySelector('.qcard'); n++;
+          const lines = [...(card?.querySelectorAll('.choice') || [])];
+          if (!card || card.dataset.variant !== 'spot') bad.push(`${it.id}: no spot-the-error card`);
+          else if (lines.length !== 3) bad.push(`${it.id}: spot-the-error needs three lines (found ${lines.length})`);
+          const stray = card?.textContent.match(/\b(null|undefined|NaN)\b|\[object/);
+          if (stray) bad.push(`${it.id}: stray text "${stray[0]}"`);
+        }
+      }
+      window.J.forceVariant = null;
       return { checked: n, problems: bad };
     };
   }

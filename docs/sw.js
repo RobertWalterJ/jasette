@@ -23,8 +23,8 @@
 // opaque response is charged to the storage quota at a padded ~7 MB each, which would make
 // a few hundred clips look like gigabytes.
 
-const VERSION = "jasette-v-1.4.0-df52a7b885";          // stamped per deploy by make-deploy.mjs
-const SHELL = ['./', 'index.html', 'icons/icon-192.png', 'icons/icon-512.png', "app.a73e5952a7.js", "style.c05c5e43b5.css", "data/deck.9da6ce447d.json", "data/audio.dd3ffd93b4.json", 'fonts/fonts.css', 'fonts/atkinson-hyperlegible-latin-400.woff2', 'fonts/atkinson-hyperlegible-latin-700.woff2', 'fonts/fraunces-latin.woff2'];   // make-deploy.mjs appends the hashed files
+const VERSION = "jasette-v-1.5.0-9c6ef7144e";          // stamped per deploy by make-deploy.mjs
+const SHELL = ['./', 'index.html', 'icons/icon-192.png', 'icons/icon-512.png', "app.14a5d265c7.js", "style.9f00f100db.css", "data/deck.b26c280d79.json", "data/audio.dd3ffd93b4.json", 'fonts/fonts.css', 'fonts/atkinson-hyperlegible-latin-400.woff2', 'fonts/atkinson-hyperlegible-latin-700.woff2', 'fonts/fraunces-latin.woff2'];   // make-deploy.mjs appends the hashed files
 const OURS = /^jasette-v-/;
 const CORE = 'jasette-audio-core', OTHER = 'jasette-audio-other', META = 'jasette-audio-meta';
 const MB = 1048576;

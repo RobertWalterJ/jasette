@@ -70,6 +70,9 @@ by finding where you stand and then spends its teaching on what is new.
   lines; verify re-derives every form independently.
 - **Read aloud, and the right answer when you're wrong.** With read-aloud on, a wrong answer is
   followed by the correct answer in French (and nothing else unless “read the answer too” is on).
+- **Conversations.** Five short exchanges in everyday Québec situations (the dépanneur, a restaurant, a neighbour, the bus stop, the pharmacy). Hear the other person, choose your reply by tapping or by SAYING it (the phone works out which of three replies you said), and see why, every time: the natural reply, the correct-but-wrong-here reply, and the real learner error. Content and checks in `content/dialogues.mjs` and verify.
+- **Culture and variation.** Fourteen short notes on how Québec, Canadian and France French differ, Joual, the sacres, anglicisms, the `-tu` question particle, pronunciation, feminine job titles, and more. Written in the app's own words from named Wikipedia articles (CC BY-SA 4.0, revision ids recorded in the deck); `build/culture-src.mjs` saves the article text and `verify` fails if any note's key phrase is not in its article.
+- **More question formats.** *Associe les mots* (match five French words to five meanings; only words already met, and only meanings that cannot be confused) and *Laquelle est fausse ?* (spot the wrong line), a variation that replaces some conjugation drills once the form is known.
 - **Short rounds.** 18 questions a round; up to 40 new a day on offer across several rounds,
   or a slower 15–20 a day if you do one. Nothing is forced.
 - **Read aloud, three ways**: a speaker beside every choice, an *À voix haute* button on every

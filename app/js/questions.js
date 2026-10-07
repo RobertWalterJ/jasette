@@ -12,8 +12,8 @@ import { unlock } from './speech.js';
 import { playWord, playSentence, playCanadian, stopAudio, wordClip } from './audio.js';
 import { asrSupported, listenFor, matches, similar, verdict } from './asr.js';
 import { hintFor, tipNode } from './help.js';
-import { autoRead, readQuestionButton, cancelReading, onAutoplayEnd } from './read.js';
-import { conjFacts, conjAfter, paradigmAfter, paradigmText, PERSON } from './conj.js';
+import { autoRead, readQuestionButton, cancelReading, onAutoplayEnd, speakQueue } from './read.js';
+import { conjFacts, conjAfter, paradigmAfter, paradigmText, PERSON, elide } from './conj.js';
 import { S, voicePref, wordNode, plainWord, articleFor, playBtn, wordVoices, sentenceBtn, sentenceBlock, wordCard, voiceNote, readBtn, lab, fillSentence, segmentsAround, choices, afterCard, ipaLine, creditLine, qcIcon, exprCard } from './parts.js';
 
 const prompt = (key, extra = null) => h('p', { class: 'prompt' }, lab(key), extra);
@@ -22,7 +22,7 @@ export const skillChip = (skill) => h('span', { class: 'skill' }, h('span', { ht
 
 export function renderQuestion(it, ctx) {
   const el = renderKind(it, ctx);
-  const tip = hintFor(it.k);
+  const tip = hintFor(el.dataset?.variant === 'spot' ? 'conj-spot' : it.k);
   const p = el.querySelector?.('.prompt');
   if (tip && p) p.after(tipNode(tip));
   // auto-read mode: say the question as it appears (a listening question's recording waits for it)
@@ -39,9 +39,10 @@ function renderKind(it, ctx) {
     case 'sentence-say': return sentenceSay(it, ctx);
     case 'word-cloze': return gapSingle(it, ctx, { key: 'pGap' });
     case 'conj-pick': return gapSingle(it, ctx, { key: 'pForm', cue: conjCue });
-    case 'conj-drill': return conjDrill(it, ctx);
+    case 'conj-drill': return useSpot(it) ? conjSpot(it, ctx) : conjDrill(it, ctx);
     case 'conj-row': case 'conj-across': return conjParadigm(it, ctx);
     case 'idiom-mean': return idiomMean(it, ctx);
+    case 'match-pairs': return matchPairs(it, ctx);
     case 'aux-pick': return gapSingle(it, ctx, { key: 'pAux', cue: (q) => `${t('pAux')} ${q.participle}` });
     case 'agree-pick': return gapSingle(it, ctx, { key: 'pAgree' });
     case 'pronoun-pick': return gapSingle(it, ctx, { key: 'pPronoun' });
@@ -264,6 +265,59 @@ function gapSingle(it, ctx, { key, cue = null }) {
   return c;
 }
 
+// ── 5a-0. matching pairs: five words, five meanings ───────────────────────
+// Tap a word and its meaning, in either order. A right pair locks with a tick; a wrong tap shows a cross
+// until the next tap (no timers). At most one wrong tap still counts as right.
+function matchPairs(it, ctx) {
+  const d = D();
+  const items = it.ws.map((i) => ({ i, w: d.words[i] }));
+  const c = card('reading', prompt('pMatch'));
+  const msg = h('p', { class: 'note', 'aria-live': 'polite' }, 'Tap a French word, then its meaning (or the other way round).');
+  const btns = new Map();
+  const mk = (x, side) => {
+    const b = h('button', { class: 'mbtn ' + side, type: 'button', 'aria-pressed': 'false', onclick: () => tap(side, x) }, side === 'fr' ? wordNode(x.w) : x.w.g);
+    btns.set(side + x.i, b);
+    return b;
+  };
+  const grid = h('div', { class: 'mgrid' }, h('div', { class: 'mcol' }, ...shuffle(items.slice()).map((x) => mk(x, 'fr'))), h('div', { class: 'mcol' }, ...shuffle(items.slice()).map((x) => mk(x, 'en'))));
+  let picked = null, wrong = 0, matched = 0, flagged = [];
+  const clearFlags = () => { for (const b of flagged) { b.classList.remove('nope'); b.querySelector('.mark')?.remove(); } flagged = []; };
+  const mark = (b, ch) => b.append(h('span', { class: 'mark', 'aria-hidden': 'true' }, ch));
+  function tap(side, x) {
+    const b = btns.get(side + x.i);
+    if (b.classList.contains('matched')) return;
+    clearFlags();
+    if (!picked || picked.side === side) {                       // choose (or change) the first of a pair
+      if (picked) { picked.b.setAttribute('aria-pressed', 'false'); }
+      picked = { side, x, b }; b.setAttribute('aria-pressed', 'true');
+      msg.textContent = side === 'fr' ? 'Now its meaning.' : 'Now the French word.';
+      return;
+    }
+    const first = picked; picked = null; first.b.setAttribute('aria-pressed', 'false');
+    if (first.x.i === x.i) {                                     // a pair
+      for (const e of [first.b, b]) { e.classList.add('matched'); e.disabled = true; mark(e, '✓'); }
+      msg.textContent = 'Right.';
+      if (++matched === items.length) finish();
+    } else {                                                     // not a pair
+      wrong++; flagged = [first.b, b];
+      for (const e of flagged) { e.classList.add('nope'); mark(e, '✗'); }
+      msg.textContent = 'Not those two. Try another.';
+    }
+  }
+  function finish() {
+    const ok = wrong <= 1;
+    done(ctx, ok);
+    const french = items.map((x) => x.w.d || x.w.w);
+    c.append(afterCard([
+      h('div', { class: 'gpoint' }, h('h3', {}, 'The five pairs'),
+        h('table', { class: 'ctable' }, h('tbody', {}, ...items.map((x) => h('tr', {}, h('td', { class: 'f' }, typo(x.w.d || x.w.w)), h('td', {}, x.w.g))))),
+        h('button', { class: 'btn ghost', type: 'button', onclick: () => { unlock(); speakQueue(french.map((text) => ({ text, lang: 'fr', pause: 450 }))); } }, h('span', { html: ICON.speaker, style: 'display:inline-flex;width:18px' }), ' Hear the five')),
+    ], { ...ctx, ok, say: ok ? null : french.join(', ') }));
+  }
+  c.append(msg, grid);
+  return c;
+}
+
 // ── 5a. an expression: what does the whole phrase mean? ──────────────────
 function idiomMean(it, ctx) {
   const x = D().expressions[it.x];
@@ -296,6 +350,41 @@ function conjParadigm(it, ctx) {
       c.append(afterCard([paradigmAfter(it)], { ...ctx, ok, say: paradigmText(it) }));
     },
   }));
+  return c;
+}
+
+// ── 5a-3. spot the error: a variation on the conjugation drill ────────────
+// Once a form is known (the card is in review), some of its drills turn the question round: three lines,
+// one wrong, tap the wrong one. Recognising a wrong form is a different skill from producing a right one,
+// and it is a change of pace. Simple tenses only; every wrong line is one of the drill's own distractors
+// with this person's pronoun, so it is wrong by construction (and verify checks the drill itself).
+const SIMPLE_TENSES = ['pr', 'im', 'fu', 'co', 'su'];
+const dayNumber = () => Math.floor(Date.now() / 864e5);
+function useSpot(it) {
+  if (window.J?.forceVariant === 'spot') return SIMPLE_TENSES.includes(it.tense);
+  if (!SIMPLE_TENSES.includes(it.tense) || State.card(it.id)?.st !== 'review') return false;
+  let hsh = 0; for (const ch of it.id) hsh = (hsh * 31 + ch.charCodeAt(0)) >>> 0;
+  return (hsh + dayNumber()) % 3 === 0;                          // about one review in three, varying by day
+}
+function conjSpot(it, ctx) {
+  const d = D();
+  const c0 = d.conj[it.v];
+  const f = conjFacts(it);
+  const subj = it.tense === 'su';
+  const row = c0[it.tense];
+  const others = shuffle([0, 1, 2, 3, 4, 5].filter((s) => s !== it.slot && row[s] && row[s] !== '-' && row[s] !== it.answer));
+  const good = others.slice(0, 2).map((s) => elide(s, row[s], subj));
+  const wrongForm = it.options.find((o) => o && o !== '-') || it.options[0];       // a distractor: wrong for this person in this tense
+  const wrongLine = elide(it.slot, wrongForm, subj);
+  const c = card('grammar', prompt('pSpot'), h('p', { class: 'bigword' }, typo(f.inf)), h('p', { class: 'gloss' }, f.gloss), h('p', { class: 'cue' }, f.tenseFr));
+  c.dataset.variant = 'spot';
+  c.append(choices(good, wrongLine, (ok) => {
+    done(ctx, ok);
+    c.append(afterCard([
+      h('p', {}, 'The wrong line was ', h('b', { class: 'fr' }, typo(wrongLine)), '. It should be ', h('b', { class: 'fr' }, typo(it.text)), '.'),
+      conjAfter(it),
+    ], { ...ctx, ok, say: it.text }));
+  }, { cls: 'fr-c' }));
   return c;
 }
 

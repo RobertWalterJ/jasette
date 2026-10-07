@@ -372,6 +372,28 @@ const REPEAT_PER_STAGE = 50, SAY_PER_STAGE = 40;
   }
 }
 
+// ── 3c. matching pairs: five French words, five meanings ─────────────────
+// A touch-friendly consolidation game for words the learner has already met: tap a word, tap its meaning.
+// Words are taken in frequency order, five at a time, and only grouped where no two meanings share a content
+// word (so a pair can never be ambiguous). Short plain glosses only, so five fit a phone screen.
+{
+  const fits = (w) => ['n', 'v', 'adj'].includes(w.k) && w.r <= 2600 && w.g && w.g.length <= 20 && !/[(),;]/.test(w.g) && w.reg !== 'fam';
+  let waiting = WORDS.map((w, i) => ({ w, i })).filter(({ w }) => fits(w)).sort((a, b) => a.w.r - b.w.r);
+  const groups = [];
+  while (waiting.length >= 5) {
+    const grp = [], later = [];
+    for (const x of waiting) {
+      if (grp.length < 5 && !grp.some((y) => y.w.g === x.w.g || overlap(kw(y.w.g), kw(x.w.g)))) grp.push(x); else later.push(x);
+    }
+    if (grp.length < 5) break;
+    groups.push(grp);
+    waiting = later;
+  }
+  for (const [n, grp] of groups.entries()) {
+    items.push({ id: `mp/${n + 1}`, k: 'match-pairs', ws: grp.map((x) => x.i), level: 3, stageHint: Math.max(...grp.map((x) => stageOfRank(x.w.r))) });
+  }
+}
+
 // ── 4. gender: un or une ─────────────────────────────────────────────────
 // Only for nouns Lexique and Wiktionary agree about.
 const endings = { f: GP.get('gender').endings.f, m: GP.get('gender').endings.m };
@@ -1011,6 +1033,17 @@ for (const [n, e] of exprDeck.entries()) {
 const DIALOGUES = await load('content/dialogues.mjs');
 DIALOGUES.forEach((d, n) => items.push({ id: `dlg/${d.id}`, k: 'dialogue', d: n, level: 4, stageHint: { A2: 1, 'A2+': 2, B1: 3 }[d.level] ?? 2 }));
 
+// ── 13e. culture and variation notes ─────────────────────────────────────
+// Short notes on how Québec, Canadian and France French differ; each rests on Wikipedia articles whose text
+// is saved in corpus/culture-wikipedia.json (build/culture-src.mjs), and the deck keeps which article and
+// which revision, so the screen can name its sources.
+const CULTURE = await load('content/culture.mjs');
+const WIKI = existsSync(join(ROOT, 'corpus', 'culture-wikipedia.json')) ? read('culture-wikipedia.json') : {};
+const cultureDeck = CULTURE.map((n) => ({
+  id: n.id, title: n.title, body: n.body, qc: n.qc,
+  sources: [...new Set(n.facts.map((f) => f.page))].map((p) => ({ title: WIKI[p]?.title ?? p, revid: WIKI[p]?.revid, url: WIKI[p]?.url })),
+}));
+
 const conjTenses = Object.fromEntries(Object.entries(TENSE_LABEL).map(([k, [fr, en]]) => [k, { fr, en }]));
 const conjLadder = LADDER.map((rg, n) => ({ id: rg.id, title: rg.title, en: rg.en, why: rg.why, tenses: rg.tenses, stage: rg.stage, n: drillItems.filter((x) => x.rung === n).length,
   builds: BUILDS[rg.id].from.map((f) => LADDER.findIndex((x) => x.id === f)), uses: BUILDS[rg.id].uses,
@@ -1110,7 +1143,7 @@ const conj = {};
 for (const [i, w] of WORDS.entries()) if (w.conj && w.k === 'v') conj[i] = w.conj;
 const deck = {
   built: new Date().toISOString().slice(0, 10),
-  stages, words: wire, conj, conjLadder, conjTenses, expressions: exprDeck, dialogues: DIALOGUES, endings: endingStats,
+  stages, words: wire, conj, conjLadder, conjTenses, expressions: exprDeck, dialogues: DIALOGUES, culture: cultureDeck, endings: endingStats,
   examples, grammar, notes, cues,
   canadian: canDeck.filter((c) => c.ok).map((c) => ({ ...c, ok: undefined, audio: c.audio ? { by: c.audio.by, place: c.audio.place, f: c.audio.f, p: pathOf(c.audio.mp3) } : undefined })),
   homophones: Object.fromEntries(Object.entries(HOMO).map(([k, v]) => [k, { point: v.point, tip: v.tip, words: v.words }])),

@@ -383,6 +383,32 @@ export async function verify(deck, src) {
     }
   }
 
+  // Culture notes: every key phrase must appear in the article it names (so a note cannot say what its source
+  // does not), the Québec words it names are backed entries, and the deck carries each note's sources.
+  {
+    const notes = deck.culture || [];
+    const flat = (s) => String(s).toLowerCase().replace(/’/g, "'").replace(/\s+/g, ' ');
+    const qcBacked = new Set(src.CANADIAN.map((e) => norm(e.qc)));
+    ok(notes.length >= 10, `only ${notes.length} culture notes reached the deck`);
+    ok(src.CULTURE.length === notes.length, 'the culture notes in the deck and in content/culture.mjs differ in number');
+    for (const n of src.CULTURE) {
+      ok(n.body.length >= 300 && n.body.length <= 1100, `culture note ${n.id}: its body is ${n.body.length} characters (aim for 300 to 1,100)`);
+      ok(n.facts.length >= 2, `culture note ${n.id}: it needs at least two checkable facts`);
+      for (const f of n.facts) ok(!!src.WIKI[f.page] && flat(src.WIKI[f.page].text).includes(flat(f.has)), `culture note ${n.id}: the article "${f.page}" does not contain "${f.has}"`);
+      ok((n.qc || []).every((w) => qcBacked.has(norm(w))), `culture note ${n.id}: a Québec word it names is not a backed entry`);
+      const dn = notes.find((x) => x.id === n.id);
+      ok(!!dn && dn.sources.length >= 1 && dn.sources.every((s) => !!s.revid && !!s.url), `culture note ${n.id}: the deck is missing its sources`);
+    }
+  }
+
+  // Matching pairs: five different plain words whose meanings cannot be confused with one another.
+  for (const it of deck.items.filter((q) => q.k === 'match-pairs')) {
+    ok(Array.isArray(it.ws) && it.ws.length === 5 && new Set(it.ws).size === 5, `${it.id}: a matching game needs five different words`);
+    const ws = (it.ws || []).map((i) => deck.words[i]).filter(Boolean);
+    ok(ws.length === 5 && ws.every((w) => !!w.g && w.g.length <= 20 && ['n', 'v', 'adj'].includes(w.k)), `${it.id}: a word has no short plain meaning`);
+    for (let a = 0; a < ws.length; a++) for (let b = a + 1; b < ws.length; b++) ok(ws[a].g !== ws[b].g && !overlap(kw(ws[a].g), kw(ws[b].g)), `${it.id}: "${ws[a].g}" and "${ws[b].g}" share a meaning, so a pair could be ambiguous`);
+  }
+
   // ── the course ─────────────────────────────────────────────────────────
   ok(deck.stages.length === SYLLABUS.length, 'the number of stages differs from the syllabus');
   for (const [n, st] of deck.stages.entries()) {
@@ -456,6 +482,8 @@ async function sources() {
     CANADIAN: await load('content/canadian.mjs'), GRAMMAR: await load('content/grammar.mjs'),
     EXPR: await load('content/expressions.mjs'), EXPR_SRC: existsSync(join(ROOT, 'corpus/expressions-src.json')) ? read('corpus/expressions-src.json') : {},
     DIALOGUES: await load('content/dialogues.mjs'),
+    CULTURE: await load('content/culture.mjs'),
+    WIKI: existsSync(join(ROOT, 'corpus/culture-wikipedia.json')) ? read('corpus/culture-wikipedia.json') : {},
     LADDER: await load('content/conjugation.mjs'), LESSONS: await load('content/conjugation-lessons.mjs'),
     BUILDS: (await import(pathToFileURL(join(ROOT, 'content/conjugation-lessons.mjs')).href)).BUILDS,
     STRINGS: (await import(pathToFileURL(join(ROOT, 'app/js/strings.js')).href)).STRINGS,
