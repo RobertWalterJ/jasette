@@ -21,8 +21,10 @@ import { press as tick, right as correct, wrong, setSound as setSoundOn } from '
 import { asrSupported } from './asr.js';
 import { S, wordNode, wordCard, playBtn, wordVoices, sentenceBlock, qcIcon, voicePref, afterCard, choices, lab, labFull } from './parts.js';
 import { GUIDE, hintFor, tipNode } from './help.js';
+import { autoRead, readQuestionButton, cancelReading, speakQueue } from './read.js';
 import { renderQuestion, skillChip } from './questions.js';
-import { SITTINGS, PACES, sitting, pace, noSpeaking, course, floorStage, inPlay, wordStates, isMet, likelyKnown } from './core.js';
+import { SITTINGS, PACES, sitting, pace, noSpeaking, course, floorStage, inPlay, wordStates, isMet, likelyKnown, conjIds, conjPace, conjState, conjSize } from './core.js';
+import { conjScreen } from './conj.js';
 import { Placement, BANDS } from './placement.js';
 import { courseScreen, wordsScreen, progressScreen, aboutScreen, wordSheet, canadianSheet } from './browse.js';
 import VERSIONS from './versions.js';
@@ -194,6 +196,19 @@ function greeting() {
 }
 const dayHash = (salt = '') => { let x = 0; for (const ch of dayKey() + salt) x = (x * 31 + ch.charCodeAt(0)) >>> 0; return x; };
 
+// A way into the Conjugaison section from Today.
+function conjCard() {
+  const cs = conjState();
+  const ids = conjIds();
+  const due = State.dueIds(ids.filter(isMet)).length;
+  const r = cs.rungs[cs.current];
+  return h('section', { class: 'card' },
+    h('p', { class: 'eyebrow' }, 'Conjugaison'),
+    h('div', { class: 'dayword' }, h('div', { style: 'flex:1;min-width:0' },
+      h('div', { class: 'w' }, r ? r.title : ''), h('div', { class: 'note' }, `${r ? r.en : ''} · step ${cs.open} of ${cs.total}${due ? ` · ${due} to review` : ''}`)),
+      h('button', { class: 'btn', type: 'button', 'aria-label': 'Conjugaison', onclick: () => show('conj') }, h('span', { html: ICON.chev }))));
+}
+
 function homeScreen() {
   const d = D();
   const { ids, assumed } = inPlay();
@@ -239,6 +254,7 @@ function homeScreen() {
         !first ? h('button', { class: 'link', type: 'button', style: 'display:block;margin:12px auto 0', onclick: guideSheet }, 'How it works · Comment ça marche') : null,
         run > 1 ? h('p', { class: 'note', style: 'margin:12px 0 0' }, h('span', { html: ICON.flame, style: 'display:inline-flex;width:16px;vertical-align:-3px;color:var(--accent2)' }), ` ${run} ${t('daysRun')}`) : null),
       first ? welcomeCard() : null,
+      !first ? conjCard() : null,
       installCard(),
       !frAvailable() ? h('section', { class: 'card flat' }, h('p', { class: 'note' }, 'Ce téléphone n’a pas de voix française. Les mots et phrases enregistrés se jouent quand même ; les autres questions d’écoute sont mises de côté.')) : null,
       word ? h('section', { class: 'card' },
@@ -287,6 +303,17 @@ function startRound(opts = {}) {
   if (round.empty) { show('empty'); return; }
   show('round', { round, practice: !!opts.practice });
 }
+// The conjugation sitting: only drills (rungs opened so far, plus any already started), its own
+// daily allowance (newC), the lowest rung first.
+function startConjRound(opts = {}) {
+  unlock();
+  const ids = conjIds();
+  const round = new Round(ids, {
+    ...opts, exclude: session.asked, pace: conjPace(), newKey: 'newC', capNew: true, groupOf: D().groupOf, stageOf: (id) => D().byId.get(id)?.rung, size: conjSize(opts),
+  });
+  if (round.empty) { show('empty'); return; }
+  show('round', { round, practice: !!opts.practice, conj: true });
+}
 function emptyScreen() {
   return [header('Série'), h('main', {}, h('section', { class: 'card' },
     h('p', {}, 'Rien à poser pour le moment : tout a été demandé ces dernières heures.'),
@@ -298,7 +325,7 @@ let inRound = false;
 function roundScreen(arg) {
   // A round lives in memory. Arriving here without one (the back button, a reload) means starting fresh.
   if (!arg?.round) return emptyScreen();
-  const { round, practice } = arg;
+  const { round, practice, conj = false } = arg;
   inRound = true;
   const box = h('main', { class: 'round' });
   const prog = h('i');
@@ -309,7 +336,7 @@ function roundScreen(arg) {
   const stageBefore = course().current;
   const newToday = new Set();
   const paint = () => { prog.style.width = `${(done / Math.max(1, total)) * 100}%`; count.textContent = done >= total ? '' : t('question', { a: Math.min(done + 1, total), b: total }); };
-  const leave = () => { inRound = false; setLeaveGuard(null); show('today'); };
+  const leave = () => { inRound = false; setLeaveGuard(null); show(conj ? 'conj' : 'today'); };
   setLeaveGuard(() => { if (!inRound) return false; inRound = false; setLeaveGuard(null); return false; });
 
   const finish = () => {
@@ -321,8 +348,10 @@ function roundScreen(arg) {
   const summary = () => {
     const after = course();
     const passed = after.current > stageBefore ? after.stages[stageBefore] : null;
-    const { ids } = inPlay();
-    const left = new Round(ids, { practice, exclude: session.asked, pace: pace(), groupOf: D().groupOf, stageOf: (id) => D().byId.get(id)?.stage, size: sitting().size });
+    const ids = conj ? conjIds() : inPlay().ids;
+    const left = conj
+      ? new Round(ids, { practice, exclude: session.asked, pace: conjPace(), newKey: 'newC', capNew: true, groupOf: D().groupOf, stageOf: (id) => D().byId.get(id)?.rung, size: conjSize({ practice }) })
+      : new Round(ids, { practice, exclude: session.asked, pace: pace(), groupOf: D().groupOf, stageOf: (id) => D().byId.get(id)?.stage, size: sitting().size });
     const bySkill = Object.entries(tally).map(([s, v]) => `${t(s)} ${v.ok}/${v.n}`).join(' · ');
     return h('section', { class: 'card summary' },
       h('p', { class: 'eyebrow' }, practice ? t('recallDone') : t('roundDone')),
@@ -330,7 +359,7 @@ function roundScreen(arg) {
       newToday.size ? h('p', {}, `${newToday.size} mot${newToday.size === 1 ? '' : 's'} nouveau${newToday.size === 1 ? '' : 'x'} : `, h('b', { class: 'fr' }, [...newToday].slice(0, 12).map(typo).join(' · '))) : null,
       h('p', { class: 'note' }, bySkill),
       passed ? h('div', { class: 'gpoint' }, h('p', { class: 'eyebrow' }, t('passed')), h('p', {}, `${passed.title} : ${passed.can}`), after.stages[after.current] ? h('p', { class: 'note' }, `Ensuite : ${after.stages[after.current].title}.`) : null) : null,
-      left.empty ? h('p', { class: 'note' }, nextDueLine(State.nextDue(ids))) : h('button', { class: 'btn primary wide', type: 'button', style: 'margin-top:12px', onclick: () => startRound({ practice }) }, t('again')),
+      left.empty ? h('p', { class: 'note' }, nextDueLine(State.nextDue(ids))) : h('button', { class: 'btn primary wide', type: 'button', style: 'margin-top:12px', onclick: () => (conj ? startConjRound({ practice }) : startRound({ practice })) }, t('again')),
       h('button', { class: 'btn ghost wide', type: 'button', style: 'margin-top:10px', onclick: leave }, t('done')));
   };
 
@@ -409,8 +438,10 @@ function placementScreen() {
     };
     const ch = choices(it.options, w.g, (ok) => { dk.remove(); answer(ok); });
     const dk = h('button', { class: 'btn ghost wide', type: 'button', style: 'margin-top:12px', onclick: () => { ch.classList.add('locked'); dk.remove(); answer(false); } }, labFull('dontKnow'));
+    c.prepend(h('div', { class: 'qhead' }, c.querySelector('.skill'), readQuestionButton(c)));
     c.append(ch, dk);
     box.replaceChildren(c);
+    autoRead(c);
     window.scrollTo(0, 0);
   };
   const conclude = () => {
@@ -464,6 +495,14 @@ function settingsScreen() {
       row(t('spacing'), 'Plus d’air entre les lettres et les lignes.', toggle('dys', !!s.dys, applyLook)),
       row('Une seule police, sans empattements', 'Met le français dans la même police simple que le reste, au lieu de la police à empattements.', toggle('plain', !!s.plain, applyLook))),
     h('section', { class: 'card' },
+      h('h2', { style: 'font-size:1.2rem;margin-bottom:8px' }, lab('readAloud')),
+      h('p', { class: 'note' }, 'Every question has an “À voix haute” (Aloud) button and a speaker beside each choice. Auto-read says the question for you the moment it appears; tap anything and it stops. It uses your phone’s own voices.'),
+      row(lab('autoRead'), null, seg('autoRead', [['off', t('off')], ['q', t('readQ')], ['qc', t('readQC')]], () => { cancelReading(); toast(t('readAloud')); })),
+      row(lab('readFeedback'), 'After you answer: whether you were right, the right answer, the sentence and its translation.', toggle('readFeedback', !!s.readFeedback)),
+      row(lab('showSpeakers'), null, toggle('showSpeakers', s.showSpeakers !== false)),
+      row(lab('speechRate'), null, h('div', { class: 'seg', style: 'margin:0' }, ...[[0.8, t('slow')], [0.95, t('normal')], [1.1, t('fast')]].map(([v, label]) => h('button', { type: 'button', 'aria-pressed': (s.rate || 0.95) === v ? 'true' : 'false', onclick: (e) => { s.rate = v; State.save(); for (const b of e.currentTarget.parentElement.children) b.setAttribute('aria-pressed', 'false'); e.currentTarget.setAttribute('aria-pressed', 'true'); unlock(); speakQueue([{ text: 'Bonjour, voici ma voix.', lang: 'fr' }]); } }, label)))),
+      h('div', { class: 'srow col', style: 'border:0' }, h('button', { class: 'btn ghost wide', type: 'button', onclick: () => { unlock(); speakQueue([{ text: 'Bonjour, voici ma voix.', lang: 'fr' }, { text: 'And this is the English voice.', lang: 'en' }]); } }, h('span', { html: ICON.speaker }), t('testVoices')))),
+    h('section', { class: 'card' },
       h('h2', { style: 'font-size:1.2rem;margin-bottom:8px' }, lab('soundsVoices')),
       row(t('voice'), 'Quelle voix joue d’abord pour les mots. « Les deux » alterne : on entend le français des deux côtés.', seg('voice', [['qc', t('voiceQc')], ['fr', t('voiceFr')], ['both', t('voiceBoth')]])),
       row(t('sound'), 'De petits sons quand tu réponds.', toggle('sound', s.sound !== false, (v) => setSoundOn(v))),
@@ -503,6 +542,7 @@ async function boot() {
   }
   route('today', homeScreen);
   route('course', courseScreen);
+  route('conj', () => conjScreen({ header, start: startConjRound, refresh: repaint }));
   route('words', wordsScreen);
   route('progress', progressScreen);
   route('settings', settingsScreen, { tabs: false });
@@ -514,6 +554,24 @@ async function boot() {
   if (new URLSearchParams(location.search).has('debug')) {
     route('q', ({ id } = {}) => [header('question'), h('main', {}, renderQuestion(D().byId.get(id), { onAnswer() {}, onNext: () => show('today'), practice: true }))], { tabs: false });
     window.J = { D, State, show, ask: (id) => show('q', { id }), kinds: () => [...new Set(D().items.map((i) => i.k))] };
+    // J.sweep(): render the first question of every kind (and a handful more of each) and report
+    // anything that looks wrong: a stray "null"/"undefined" in the text, no read button, no way to answer.
+    window.J.sweep = async (per = 3) => {
+      const bad = [];
+      let n = 0;
+      for (const k of window.J.kinds()) {
+        for (const it of D().items.filter((i) => i.k === k).slice(0, per)) {
+          window.J.ask(it.id); await new Promise((r) => setTimeout(r, 120));
+          const card = document.querySelector('.qcard'); n++;
+          if (!card) { bad.push(`${it.id}: no card`); continue; }
+          const stray = card.textContent.match(/\b(null|undefined|NaN)\b|\[object/);
+          if (stray) bad.push(`${it.id}: stray text "${stray[0]}"`);
+          if (!card.querySelector('.readq')) bad.push(`${it.id}: no read-aloud button`);
+          if (!card.querySelector('.choice, .tile, .btn, .play')) bad.push(`${it.id}: nothing to answer with`);
+        }
+      }
+      return { checked: n, problems: bad };
+    };
   }
   buildTabs();
   onScreen((name, tabs) => { syncTabs(name, tabs); State.save(); });

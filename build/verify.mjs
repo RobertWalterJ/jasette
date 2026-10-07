@@ -169,6 +169,68 @@ export async function verify(deck, src) {
     const all = new Set(Object.entries(c || {}).flatMap(([k, r]) => (['pr', 'im', 'fu', 'co', 'su'].includes(k) ? r : [])));
     for (const o of it.options) ok(all.has(o) && o !== it.answer, `${it.id}: option "${o}" is not another form of the verb`);
   }
+  // conjugation drills: every answer is re-derived here, from the verb's own table and from rules
+  // written out again (not imported from the generator), and every wrong option must really be wrong
+  {
+    const drills = deck.items.filter((x) => x.k === 'conj-drill');
+    const ladder = deck.conjLadder || [];
+    ok(ladder.length >= 10 && drills.length >= 1000, 'the conjugation ladder is missing or too small');
+    ok(ladder.reduce((n, r) => n + r.n, 0) === drills.length, 'the ladder counts do not add up to the drills');
+    const row = (l, key) => deck.conj[deck.words.findIndex((x) => x.w === l)]?.[key];
+    const ETRE = new Set(['aller', 'venir', 'arriver', 'partir', 'rester', 'tomber', 'naître', 'mourir', 'devenir', 'revenir', 'entrer']);
+    const AUXKEY = { pc: 'pr', pqp: 'im', fa: 'fu', cop: 'co', sup: 'su' };
+    const SIMPLE = ['pr', 'im', 'fu', 'co', 'su'];
+    const IMP_IRR = { être: ['', 'sois', '', 'soyons', 'soyez'], avoir: ['', 'aie', '', 'ayons', 'ayez'], savoir: ['', 'sache', '', 'sachons', 'sachez'] };
+    const DROPS = new Set(['ouvrir', 'offrir', 'couvrir', 'souffrir', 'cueillir', 'accueillir', 'recueillir', 'découvrir', 'recouvrir', 'entrouvrir', 'aller']);
+    const PRON = [['je', 'j’'], ['tu'], ['il', 'elle', 'on'], ['nous'], ['vous'], ['ils', 'elles']];
+    for (const it of drills) {
+      const w = deck.words[it.v], c = deck.conj[it.v];
+      ok(!!w && w.k === 'v' && !!c, `${it.id}: not a verb`);
+      if (!w || !c) continue;
+      ok(!!deck.conjTenses?.[it.tense] && it.rung >= 0 && it.rung < ladder.length && ladder[it.rung].tenses.includes(it.tense), `${it.id}: the tense is not on its rung`);
+      ok(it.options.length === 3 && new Set([it.answer, ...it.options]).size === 4, `${it.id}: the options must be three different forms, none the answer`);
+      ok(![it.answer, ...it.options].some((x) => !x || /undefined|^-$/.test(x)), `${it.id}: a missing form in the options`);
+      ok(it.slot >= 0 && it.slot <= 5, `${it.id}: no such person`);
+      ok(it.stage === ladder[it.rung]?.stage, `${it.id}: its stage is not its rung's stage`);
+      // the line shown: pronoun + answer, or (imperative) the answer and a bang
+      let pron = '';
+      if (it.tense === 'ip') ok(it.text === it.answer + ' !', `${it.id}: the imperative line is not the answer`);
+      else {
+        ok(it.text.endsWith(it.answer), `${it.id}: the line does not end with the answer`);
+        pron = it.text.slice(0, it.text.length - it.answer.length);
+        const subj = it.tense === 'su' || it.tense === 'sup';
+        const vowel = /^[aeiouyàâäéèêëîïôöùûüœæh]/i.test(it.answer);
+        const allowed = PRON[it.slot].map((p) => {
+          if (!subj) return p === 'je' ? (vowel ? ['j’'] : ['je ']) : p === 'j’' ? [] : [p + ' '];
+          if (p === 'je') return vowel ? ['que j’'] : ['que je '];
+          if (p === 'j’') return [];
+          return /^(il|elle|on|ils|elles)$/.test(p) ? ['qu’' + p + ' '] : ['que ' + p + ' '];
+        }).flat();
+        ok(allowed.includes(pron), `${it.id}: the pronoun "${pron}" is wrong for person ${it.slot} (${subj ? 'subjunctive' : 'indicative'}, "${it.answer}")`);
+      }
+      if (SIMPLE.includes(it.tense)) {
+        ok(c[it.tense][it.slot] === it.answer, `${it.id}: "${it.answer}" is not the ${it.tense} form for person ${it.slot}`);
+      } else if (it.tense === 'ip') {
+        ok([1, 3, 4].includes(it.slot), `${it.id}: the imperative has no such person`);
+        const want = IMP_IRR[w.w] ? IMP_IRR[w.w][it.slot] : it.slot === 1 ? ((w.w.endsWith('er') || DROPS.has(w.w)) && c.pr[1].endsWith('s') ? c.pr[1].slice(0, -1) : c.pr[1]) : c.pr[it.slot];
+        ok(want === it.answer, `${it.id}: the imperative should be "${want}", not "${it.answer}"`);
+      } else if (it.tense === 'fp') {
+        ok(it.answer === `${row('aller', 'pr')[it.slot]} ${w.w}`, `${it.id}: the near future is not aller + the infinitive`);
+      } else {
+        const etreV = ETRE.has(w.w);
+        ok(etreV || w.aux === 'avoir', `${it.id}: a compound tense for a verb that can take either helper`);
+        ok(!etreV || [2, 5].includes(it.slot), `${it.id}: an être verb is only asked where the subject settles the agreement`);
+        const parts = it.answer.split(' ');
+        ok(parts.length === 2, `${it.id}: a compound answer is a helper and a participle`);
+        const helper = row(etreV ? 'être' : 'avoir', AUXKEY[it.tense])?.[it.slot];
+        ok(parts[0] === helper, `${it.id}: the helper should be "${helper}"`);
+        const who = pron.trim().split(/[ ’]/).pop();
+        let pp = c.pp;
+        if (etreV) pp = it.slot === 2 ? (who === 'elle' ? pp + 'e' : pp) : who === 'elles' ? pp + 'es' : (/[sx]$/.test(pp) ? pp : pp + 's');
+        ok(parts[1] === pp, `${it.id}: the participle should be "${pp}" and agree with "${who}"`);
+      }
+    }
+  }
   for (const it of deck.items.filter((x) => x.k === 'aux-pick')) {
     const w = wi(it.i);
     ok(w.aux === it.aux, `${it.id}: the verb takes ${w.aux}, the question says ${it.aux}`);

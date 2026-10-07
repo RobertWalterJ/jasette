@@ -48,7 +48,7 @@ let seed = 42;
 const rand = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
 const fails = [];
 
-function simulate({ label, floor, days }) {
+function simulate({ label, floor, days, conj = false }) {
   store.clear();
   S.State.data = { v: 1, cards: {}, days: {}, settings: { sound: true, theme: 'fleurdelise', scheme: 'auto', voice: 'qc', lang: 'both', pace: 'steady', sitting: 'long' }, placement: null };
   if (floor) { S.State.data.placement = { at: 0, floor, size: 3000, asked: 30, proportions: [1, 1, 1, 1, 0.9, 0.8, 0.6, 0.35, 0.2, 0.1, 0, 0] }; S.State.data.maxStage = floor; }
@@ -57,6 +57,7 @@ function simulate({ label, floor, days }) {
   const skills = new Set();
   const newByDay = [];
   let worstBacklog = 0, rounds = 0, empty = 0, short = 0, spotAsked = 0, spotRight = 0, spotGraduated = 0, dry = 0, longestDry = 0, totalNew = 0;
+  let conjRounds = 0, conjNew = 0, conjQs = 0, worstConjDue = 0;
   const failsHere = [];
   for (let day = 0; day < days; day++) {
     const sittings = day % 7 === 3 ? 6 : day % 3 === 0 ? 2 : 4;   // he plays in bursts, several times a day
@@ -81,6 +82,8 @@ function simulate({ label, floor, days }) {
         const sk = D.SKILL[it.k];
         if (sk) skills.add(sk);
         const card = S.State.card(id);
+        // a conjugation drill nobody has opened must never turn up in an ordinary round
+        if (it.k === 'conj-drill' && !card) failsHere.push(`day ${day}: the unstarted drill ${id} was offered in an ordinary round`);
         const isSpot = round.spotSet.has(id);
         if (!card) { if (!isSpot) { newToday++; totalNew++; } }
         // A placed learner knows what is behind them (92%); new things go at 55-60%; reviews at 88%.
@@ -92,6 +95,29 @@ function simulate({ label, floor, days }) {
         t += 12e3;
       }
       S.State.snapshot(deck.items.map((x) => x.id));
+    }
+    // The conjugation sitting: one a day, with its own ladder, allowance and sitting length (core.js).
+    if (conj) {
+      t += 90 * 60e3;
+      const cids = C.conjIds();
+      const csize = C.conjSize();
+      const cround = new S.Round(cids, { exclude: asked, pace: C.conjPace(), newKey: 'newC', capNew: true, groupOf: D.D().groupOf, stageOf: (id) => D.D().byId.get(id)?.rung, size: csize });
+      if (!cround.empty) {
+        conjRounds++;
+        if (cround.queue.length > csize) failsHere.push(`day ${day}: a conjugation sitting of ${cround.queue.length}, longer than ${csize}`);
+        const seenC = new Set();
+        let cid;
+        while ((cid = cround.next())) {
+          if (seenC.has(cid)) failsHere.push(`day ${day}: ${cid} asked twice in one conjugation sitting`);
+          seenC.add(cid); asked.add(cid);
+          const card = S.State.card(cid);
+          if (!card) conjNew++;
+          conjQs++;
+          S.State.answer(cid, rand() < (card && card.st !== 'new' ? 0.88 : 0.7), { practice: cround.extra.has(cid) });
+          t += 9e3;
+        }
+      }
+      worstConjDue = Math.max(worstConjDue, S.State.dueIds(C.conjIds().filter((id) => S.State.card(id))).length);
     }
     newByDay.push(newToday);
     const { ids: pool } = C.inPlay();
@@ -110,7 +136,7 @@ function simulate({ label, floor, days }) {
   // than let the pile grow without limit.
   const first = newByDay.slice(0, 14).reduce((a, b) => a + b, 0) / 14;
   if (floor && first < 30) failsHere.push(`only ${first.toFixed(1)} new questions a day in the first fortnight (the aim is 30 or more)`);
-  if (totalNew / days < (floor ? 18 : 10)) failsHere.push(`only ${(totalNew / days).toFixed(1)} new questions a day on average`);
+  if (totalNew / days < (conj ? 13 : floor ? 18 : 10)) failsHere.push(`only ${(totalNew / days).toFixed(1)} new questions a day on average`);
   if (worstBacklog > 1300) failsHere.push(`the due pile reached ${worstBacklog} — reviews are being buried`);
   if (short > rounds * 0.25) failsHere.push(`${short} of ${rounds} rounds came up short of the sitting length`);
   if (skills.size < 5) failsHere.push(`only ${skills.size} of the six skills were ever started: ${[...skills].join(', ')}`);
@@ -122,11 +148,20 @@ function simulate({ label, floor, days }) {
   console.log(`test-schedule · ${label}: ${days} days, ${rounds} rounds, ${met.toLocaleString()} questions met, ${known.toLocaleString()} known, now at stage ${stage + 1}`);
   console.log(`  new per day: ${(totalNew / days).toFixed(1)} (${(newByDay.slice(0, 14).reduce((a, b) => a + b, 0) / 14).toFixed(1)} in the first fortnight); worst review backlog ${worstBacklog}; rounds short ${short}/${rounds}; skills ${[...skills].sort().join(', ')}`);
   if (floor) console.log(`  spot checks: ${spotAsked} asked, ${spotRight} right, ${spotGraduated} graduated at once`);
+  if (conj) {
+    const cs = C.conjState();
+    console.log(`  conjugation: ${conjRounds} sittings, ${conjQs.toLocaleString()} answers, ${conjNew.toLocaleString()} new (${(conjNew / days).toFixed(1)} a day), ladder at step ${cs.open} of ${cs.total}, worst drill backlog ${worstConjDue}`);
+    if (conjNew / days < 8) failsHere.push(`only ${(conjNew / days).toFixed(1)} new conjugation questions a day at a pace of ${C.conjPerDay()}`);
+    if (conjNew / days > C.conjPerDay() + 0.5) failsHere.push(`${(conjNew / days).toFixed(1)} new conjugation questions a day is over the allowance of ${C.conjPerDay()}`);
+    if (cs.open < 6) failsHere.push(`the conjugation ladder reached only step ${cs.open} in ${days} days`);
+    if (worstConjDue > 700) failsHere.push(`the conjugation review pile reached ${worstConjDue}`);
+  }
   for (const f of failsHere) fails.push(`${label}: ${f}`);
 }
 
-simulate({ label: 'from the start', floor: 0, days: 180 });
-simulate({ label: 'placed at stage 4', floor: 3, days: 180 });
+if(!process.env.CONJ_ONLY) simulate({ label: 'from the start', floor: 0, days: 180 });
+if(!process.env.CONJ_ONLY) simulate({ label: 'placed at stage 4', floor: 3, days: 180 });
+simulate({ label: 'placed at stage 4, with a daily conjugation sitting', floor: 3, days: 180, conj: true });
 
 if (fails.length) {
   console.error('\ntest-schedule FAILED:');

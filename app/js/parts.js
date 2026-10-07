@@ -7,6 +7,7 @@ import { unlock, say, available as speechAvailable } from './speech.js';
 import { playWord, playSentence, playCanadian, stopAudio, wordClip, canadianClip } from './audio.js';
 import { t, sub, gloss, STRINGS } from './strings.js';
 import { reassurance } from './help.js';
+import { optionSpeaker, readyToPlay, takeAutoplayEnd, readFeedback, cancelReading } from './read.js';
 
 export const S = () => State.data.settings;
 // A phrase of the interface: the French, with its English beneath while it is still new to you,
@@ -60,16 +61,18 @@ export function playBtn({ label = null, play, big = false, autoplay = false, acc
   const ico = h('span', { class: 'ico', html: ICON.play });
   const txt = h('span', {}, label || t('play'), accent ? h('small', {}, accent === 'qc' ? 'Québec' : 'France') : null);
   const b = h('button', { class: 'play' + (big ? ' big' : ''), type: 'button', 'aria-label': label || t('play') }, ico, txt);
-  const go = async () => {
+  const go = async (auto = false) => {
     unlock();
+    cancelReading();
     b.classList.add('on');
     let d = null;
-    try { d = await play(() => b.classList.remove('on')); } catch { /* fall through */ }
+    try { d = await play(() => { b.classList.remove('on'); const after = auto ? takeAutoplayEnd() : null; if (after) after(); }); } catch { /* fall through */ }
     if (!d || d.kind === 'none') b.classList.remove('on');
     if (note && d) note.textContent = voiceNote(d);
   };
-  b.addEventListener('click', go);
-  if (autoplay) setTimeout(go, 260);
+  b.addEventListener('click', () => go(false));
+  // An auto-played recording waits for the instructions to be read first, when auto-read is on.
+  if (autoplay) setTimeout(() => readyToPlay().then(() => go(true)), 260);
   return b;
 }
 // The two accents of one word, side by side.
@@ -190,6 +193,7 @@ export function fillSentence({ segs, answers, bank, onChecked, label = null, hin
   bank.forEach((word, j) => {
     const tile = h('button', { class: 'tile', type: 'button', onclick: () => {
       if (locked || placed.includes(j)) return;
+      cancelReading();
       const at = placed.indexOf(null);
       if (at < 0) return;
       placed[at] = j; refresh();
@@ -221,15 +225,18 @@ export function choices(options, answer, onPick, { cls = '', render = null, pair
     const label = render ? render(o) : typo(o);
     const b = h('button', { class: 'choice ' + cls, type: 'button', onclick: () => {
       if (wrap.classList.contains('locked')) return;
+      cancelReading();
       wrap.classList.add('locked');
       const ok = o === answer;
       b.classList.add(ok ? 'right' : 'wrong');
       b.append(h('span', { class: 'mark', 'aria-hidden': 'true' }, ok ? '✓' : '✗'));
-      if (!ok) for (const other of wrap.children) if (other.dataset.v === answer) { other.classList.add('right'); other.append(h('span', { class: 'mark', 'aria-hidden': 'true' }, '✓')); }
+      if (!ok) for (const other of wrap.querySelectorAll('.choice')) if (other.dataset.v === answer) { other.classList.add('right'); other.append(h('span', { class: 'mark', 'aria-hidden': 'true' }, '✓')); }
       onPick(ok, o);
     } }, label);
     b.dataset.v = o;
-    wrap.append(b);
+    // the speaker is the choice's sibling, in one row
+    const spk = optionSpeaker(typo(o), /fr-c|big-c/.test(cls) ? 'fr' : 'en');
+    wrap.append(spk ? h('div', { class: 'opt' }, b, spk) : b);
   }
   return wrap;
 }
@@ -240,8 +247,10 @@ export function afterCard(kids, { onNext, ok = null, answer = null }) {
   const verdict = ok === null ? null : h('p', { class: 'verdict ' + (ok ? 'right' : 'wrong'), role: 'status' },
     h('span', { class: 'mark', 'aria-hidden': 'true' }, ok ? '✓' : '✗'),
     h('span', {}, ok ? lab('right') : lab('notQuite'), !ok && answer ? h('span', { class: 'vans' }, h('b', {}, typo(answer))) : null));
-  return h('div', { class: 'after' }, verdict, ok === false ? reassurance() : null, ...[].concat(kids).filter(Boolean),
-    h('div', { class: 'dock' }, h('button', { class: 'btn primary wide', type: 'button', onclick: onNext }, lab('next'))));
+  const el = h('div', { class: 'after' }, verdict, ok === false ? reassurance() : null, ...[].concat(kids).filter(Boolean),
+    h('div', { class: 'dock' }, h('button', { class: 'btn primary wide', type: 'button', onclick: () => { cancelReading(); onNext(); } }, lab('next'))));
+  readFeedback(el);
+  return el;
 }
 
 export { stopAudio, wordClip, canadianClip, playCanadian };

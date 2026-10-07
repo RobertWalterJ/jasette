@@ -30,6 +30,20 @@ by finding where you stand and then spends its teaching on what is new.
   **tapping words into the blanks** (one or several), un or une, the right form of
   a verb, avoir or être, participle agreement, words that sound alike, which
   spelling, minimal pairs, putting a sentence in order, false friends.
+- **A conjugation track of its own** (*Conjugaison*): ~6,400 drills in sixteen steps,
+  built from each verb's own Wiktionary table. It starts with the twelve verbs in
+  almost every sentence (être, avoir, aller, faire…) in the present, then regular
+  -er verbs, the other common verbs, passé composé, imparfait, futur proche, futur,
+  conditionnel, impératif, plus-que-parfait, subjonctif, the compound tenses, and
+  finally every verb to the 3,500th word. A step opens when the one before is about
+  half met, or when you say you already know it. It has its own daily allowance
+  (6 / 12 / 24 / 40 new) and shows the whole pattern after every answer.
+  `build/verify.mjs` re-derives every answer independently (helper, participle
+  agreement, elision, the imperative's dropped s) and `test-verify.mjs` breaks five
+  of those rules on purpose.
+- **Read aloud, three ways**: a speaker beside every choice, an *À voix haute* button on every
+  question, and an auto-read mode that says each question as it appears (and, if
+  wanted, the answer afterwards). Any touch stops it.
 - **Scheduling by FSRS** ([ts-fsrs](https://github.com/open-spaced-repetition/ts-fsrs),
   MIT): 88% requested retention. Intervals grow 3 → 18 → 86 days where SM-2 gave
   3 → 7 → 15, which is what makes 30+ new questions a day sustainable.

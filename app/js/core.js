@@ -1,8 +1,8 @@
 // Jasette — what the learner can answer, and what the course lets through.
 // Shared by the home screen, the round and the browsing screens.
 
-import { State, cardState, isHolding } from './schedule.js';
-import { D, stageState, askableIds, SKILL, SKILLS } from './deck.js';
+import { State, cardState, isHolding, newLeftToday } from './schedule.js';
+import { D, stageState, askableIds, SKILL, SKILLS, drillIds } from './deck.js';
 import { canPlayAnything } from './audio.js';
 import { BANDS } from './placement.js';
 
@@ -58,6 +58,58 @@ export function inPlay() {
   return askableIds({ canSound: canPlayAnything(), current: c.current, floor: floorStage(), met: isMet, wordMet, unlocked, noSpeaking: noSpeaking() });
 }
 
+// ── conjugation: its own ladder, its own daily allowance ─────────────────
+// A rung opens when the one before it is about half met (never more than 120 questions: the big
+// later rungs would otherwise hold the ladder for months), or because the learner skipped ahead
+// ("I know these") — settings.conjOpen is how many rungs they have opened that way.
+export const CONJ_PER_DAY = [6, 12, 24, 40];
+export const conjPerDay = () => State.data.settings?.conjPerDay || 12;
+export const conjPace = () => ({ newPerRound: Math.min(conjPerDay(), 12), newPerDay: conjPerDay() });
+const NEED_CAP = 120;
+export function conjState() {
+  const d = D();
+  const ladder = d.conjLadder || [];
+  const rungs = ladder.map((r) => ({ ...r, n: 0, met: 0, can: 0, known: 0, open: false, need: 0 }));
+  for (const it of d.items) {
+    if (it.k !== 'conj-drill') continue;
+    const r = rungs[it.rung];
+    r.n++;
+    const c = State.card(it.id);
+    if (!c) continue;
+    r.met++;
+    if (c.st !== 'new' && c.ok) r.can++;
+    if (['known', 'secure'].includes(cardState(c))) r.known++;
+  }
+  const skipped = State.data.settings?.conjOpen || 1;
+  rungs.forEach((r, k) => {
+    r.need = Math.min(Math.ceil(r.n * 0.5), NEED_CAP);
+    r.open = k === 0 || k < skipped || (rungs[k - 1].open && rungs[k - 1].met >= rungs[k - 1].need);
+  });
+  const open = rungs.filter((r) => r.open).length;
+  return { rungs, open, current: Math.max(0, open - 1), total: rungs.length };
+}
+// A sitting is as long as what is owed (reviews due + today's new allowance), never shorter than
+// ten: the ordinary round tops itself up with more new material when reviews run out, which would
+// make "12 new a day" untrue. Choosing to keep going (or to just practise) lifts it.
+export function conjSize(opts = {}) {
+  if (opts.beyondDaily || opts.practice) return sitting().size;
+  const due = State.dueIds(conjIds().filter(isMet)).length;
+  const room = newLeftToday(conjPace(), 'newC');
+  return Math.max(10, Math.min(sitting().size, due + room));
+}
+export function conjIds() {
+  const cs = conjState();
+  return drillIds({ rungOpen: (r) => cs.rungs[r]?.open, met: isMet });
+}
+// "I know these": opens the next rung without waiting for the half-way mark.
+export function skipConjAhead() {
+  const cs = conjState();
+  if (cs.open >= cs.total) return false;
+  State.data.settings.conjOpen = cs.open + 1;
+  State.save();
+  return true;
+}
+
 // How each word stands, from the best of its own questions.
 export function wordStates() {
   const d = D();
@@ -82,6 +134,7 @@ export function skillStats() {
     const sk = SKILL[it.k];
     if (!sk) continue;
     const c = State.card(it.id);
+    if (it.k === 'conj-drill' && !c) continue;                 // reported on the Conjugaison screen, not as thousands of unopened grammar questions
     const reach = it.stage == null ? cur >= d.stages.length : it.stage <= cur;
     if (reach || c) stats[sk].total++;
     if (c) {

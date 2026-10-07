@@ -62,7 +62,7 @@ const STR = {
   // prompts
   pMean: ['Que veut dire ce mot?', 'What does this mean?'], pHear: ['Que veut dire ce mot?', 'What does this mean?'], pSay: ['Dis ce mot', 'Say this word'],
   pWhich: ['Lequel veut dire ceci?', 'Which one means this?'], pGap: ['Quel mot manque?', 'Which word is missing?'], pGaps: ['Touche les mots pour remplir les blancs', 'Tap the words to fill the blanks'],
-  pSentence: ['Que dit-on?', 'What is being said?'], pGender: ['Un ou une?', 'Un or une?'], pForm: ['Quelle forme?', 'Which form?'], pAux: ['Avoir ou être?', 'Avoir or être?'],
+  pSentence: ['Que dit-on?', 'What is being said?'], pGender: ['Un ou une?', 'Un or une?'], pForm: ['Quelle forme?', 'Which form?'], pConj: ['Conjugue ce verbe', 'Conjugate this verb'], conjTitle: ['Conjugaison', 'Conjugation'], pAux: ['Avoir ou être?', 'Avoir or être?'],
   pAgree: ['Comment s’écrit le participe?', 'How is the participle spelled?'], pSpell: ['Comment ça s’écrit?', 'How is it spelled?'], pHomo: ['Lequel?', 'Which one?'],
   pSound: ['Lequel as-tu entendu?', 'Which one did you hear?'], pOrder: ['Remets dans l’ordre', 'Put it in order'], pPronoun: ['Quel pronom?', 'Which pronoun?'],
   pQcMean: ['Au Québec, ça veut dire…', 'In Québec, this means…'], pQcWord: ['Au Québec, on dit…', 'In Québec, you say…'], pQcOral: ['À l’écrit, ça donne…', 'Written out, this is…'],
@@ -87,6 +87,9 @@ const STR = {
   install: ['Installer sur l’écran d’accueil', 'Install on your home screen'], installNote: ['Une icône, plein écran, et ça marche sans réseau.', 'An icon, full screen, and it works offline.'],
   installed: ['Installée', 'Installed'], installSteps: ['Comment l’installer', 'How to install it'], installNow: ['Installer maintenant', 'Install now'], later: ['Plus tard', 'Not now'],
   storage: ['Stockage de l’audio', 'Audio storage'], audioCap: ['Espace pour les autres enregistrements', 'Room for the other recordings'], keepCore: ['Garder l’essentiel hors ligne', 'Keep the essentials offline'], freeSpace: ['Libérer de l’espace', 'Free up space'],
+  readAloud: ['Lecture à voix haute', 'Read aloud'], autoRead: ['Lecture automatique', 'Auto-read'], off: ['Non', 'Off'], readQ: ['La question', 'The question'], readQC: ['Question et choix', 'Question and choices'],
+  readFeedback: ['Lire aussi la réponse', 'Read the answer too'], showSpeakers: ['Un haut-parleur à côté de chaque choix', 'A speaker beside each choice'], speechRate: ['Vitesse de la voix', 'Voice speed'],
+  slow: ['Lente', 'Slow'], normal: ['Normale', 'Normal'], fast: ['Rapide', 'Fast'], testVoices: ['Essayer les voix', 'Try the voices'],
   fade: ['L’anglais s’efface', 'English fades as you learn'], fadeNote: ['Chaque phrase garde son anglais jusqu’à ce que tu l’aies vue plusieurs jours.', 'Each phrase keeps its English until you have seen it on several days.'],
   showEnglish: ['Remettre tout l’anglais', 'Bring all the English back'], englishBack: ['L’anglais est de retour.', 'The English is back.'],
 };

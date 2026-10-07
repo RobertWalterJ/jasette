@@ -24,7 +24,8 @@ function choose() {
   const all = speechSynthesis.getVoices?.() || [];
   if (!all.length) return;
   voices.en = pick(all.filter((v) => /^en/i.test(v.lang)), (v) => (/^en[-_]CA/i.test(v.lang) ? 6 : /^en[-_]GB/i.test(v.lang) ? 5 : 3) + quality(v));
-  voices.frCA = pick(all.filter((v) => /^fr[-_]CA/i.test(v.lang) || /canad|qu[eé]b/i.test(v.name)), quality);
+  // (A name containing "Canada" is not enough: "English (Canada)" is a Canadian voice that cannot read French.)
+  voices.frCA = pick(all.filter((v) => /^fr[-_]CA/i.test(v.lang) || (/^fr/i.test(v.lang) || /fran[cç]ais|french/i.test(v.name)) && /canad|qu[eé]b/i.test(v.name)), quality);
   voices.frFR = pick(all.filter((v) => /^fr[-_]FR/i.test(v.lang) || (/^fr/i.test(v.lang) && !/^fr[-_]CA/i.test(v.lang))), quality);
 }
 export function initSpeech() {

@@ -27,7 +27,7 @@ export const SKILL = {
   'word-say': 'speaking', 'word-pick': 'speaking',
   'word-read': 'reading', 'note-pick': 'reading',
   'spell-pick': 'writing', 'homophone-pick': 'writing',
-  'word-cloze': 'grammar', 'fill-multi': 'grammar', 'gender-pick': 'grammar', 'conj-pick': 'grammar', 'aux-pick': 'grammar', 'agree-pick': 'grammar',
+  'word-cloze': 'grammar', 'fill-multi': 'grammar', 'gender-pick': 'grammar', 'conj-pick': 'grammar', 'conj-drill': 'grammar', 'aux-pick': 'grammar', 'agree-pick': 'grammar',
   'pronoun-pick': 'grammar', 'grammar-build': 'grammar',
   'qc-mean': 'canada', 'qc-pick': 'canada', 'qc-oral': 'canada',
 };
@@ -51,6 +51,7 @@ export function indexDeck() {
     const it = deck.byId.get(id);
     if (!it) return null;
     if (it.i != null) return 'w' + it.i;
+    if (it.v != null) return 'v' + it.v;                       // a conjugation drill: one per verb per round
     if (it.q != null) return 'q' + it.q;
     if (it.gid) return 'g' + it.gid + (it.sid ? '/' + it.sid : '');
     if (it.choices) return 's' + it.id;
@@ -92,6 +93,17 @@ const NEEDS_SOUND = new Set(['word-listen', 'sentence-listen', 'sound-pair', 'qc
 export const SPEAKING_ALOUD = new Set(['word-say']);
 const askable = (it, canSound, noSpeaking) => (canSound || !NEEDS_SOUND.has(it.k)) && !(noSpeaking && SPEAKING_ALOUD.has(it.k));
 
+// Conjugation drills have a sitting of their own (the Conjugaison screen: its own ladder, its
+// own daily allowance). A drill nobody has opened is never offered in the ordinary round, or
+// six thousand of them would drown the words; one already started comes back for review there
+// like anything else.
+export const isDrill = (it) => it.k === 'conj-drill';
+export function drillIds({ rungOpen, met = () => false }) {
+  const ids = [];
+  for (const it of deck.items) if (isDrill(it) && (met(it.id) || rungOpen(it.rung))) ids.push(it.id);
+  return ids;
+}
+
 // How much material a learner has never seen must be reachable at any moment.
 // The stage gate decides the ORDER new words arrive in, and was also deciding
 // HOW MANY exist, which was never the intention (Hok Gong's loop: "the same
@@ -108,7 +120,7 @@ const SUPPLY = 220;
 // Spread over the weeks instead, the same material is a steadier load and a more varied one.
 const GATED = new Set(['word-listen', 'word-pick', 'word-cloze', 'word-say', 'spell-pick', 'gender-pick']);
 export function askableIds({ canSound = true, current = Infinity, floor = 0, met = () => false, wordMet = () => false, unlocked = () => true, noSpeaking = false } = {}) {
-  const ok = (it) => askable(it, canSound, noSpeaking) && (met(it.id) || !(GATED.has(it.k) && it.i != null) || unlocked(it.i) || (it.stage != null && it.stage < floor));
+  const ok = (it) => askable(it, canSound, noSpeaking) && (!isDrill(it) || met(it.id)) && (met(it.id) || !(GATED.has(it.k) && it.i != null) || unlocked(it.i) || (it.stage != null && it.stage < floor));
   const tail = deck.stages.length;
   const opensAt = (it) => (met(it.id) ? 0 : it.stage != null ? it.stage : tail);
   let horizon = current;

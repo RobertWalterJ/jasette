@@ -18,6 +18,7 @@ export const HINTS = {
   'word-say': 'Say the word out loud, then tap “Montre-moi” (Show me) to see it, and tell the app whether you had it.',
   'word-cloze': 'One word is missing. Tap the word that fits — it drops into the gap.',
   'conj-pick': 'Tap the correct form of the verb for the gap. The verb and the tense are shown above the sentence.',
+  'conj-drill': 'You are given a verb, a tense and a pronoun. Tap the form of the verb that goes with that pronoun in that tense. After you answer you will see the whole pattern.',
   'aux-pick': 'Past tense: does this verb use “avoir” or “être”? Tap the form that fits the gap.',
   'agree-pick': 'Tap the spelling of the past participle that agrees with the subject.',
   'pronoun-pick': 'Tap the little pronoun that fits the gap. The English translation tells you what it stands for.',
@@ -64,6 +65,8 @@ export const GUIDE = [
   ['What “spot checks” are', 'Words from the stages before the one you placed at are assumed known. Now and then one turns up as a quick check. Get it right and it stays out of your way for two weeks; get it wrong and it becomes new material.'],
   ['Tapping words into gaps', 'In sentence questions, tap a word from the bank and it drops into the next blank. Tap a placed word to take it back out. With several blanks, tap Vérifier (Check) when they are all filled.'],
   ['Listening', 'Press the play button. Words come in two accents where we have both: Québec and France. The label says whose voice it is, and whether it is a person or the phone’s own voice.'],
+  ['Conjugation', 'On the home screen, the Conjugaison card opens a section just for verbs. You are given a pronoun, a verb and a tense, and you tap the right form. It starts with the twelve verbs you use in almost every sentence, then moves on to more verbs and more tenses, step by step. It has its own number of new questions a day, which you can change there, and you can open the next step early if you already know the one before.'],
+  ['Having questions read to you', 'Every question has an À voix haute (Aloud) button, and every choice has a small speaker beside it. In Réglages (Settings), Lecture à voix haute (Read aloud) can say each question for you as soon as it appears, with or without the choices, and can read the answer afterwards. Touching anything stops it. It uses your phone’s own voices.'],
   ['The English in the menus', 'Menus are in French with English underneath. Each phrase’s English quietly disappears once you have seen it on several different days. You can bring it all back, or turn it off, in Réglages (Settings). Long-press any French phrase to see its English.'],
   ['Your progress is yours', 'It is stored on this phone only. Réglages has a button to save a copy and another to restore one, in case you change phones.'],
 ];

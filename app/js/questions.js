@@ -12,6 +12,8 @@ import { unlock } from './speech.js';
 import { playWord, playSentence, playCanadian, stopAudio, wordClip } from './audio.js';
 import { asrSupported, listenFor, matches } from './asr.js';
 import { hintFor, tipNode } from './help.js';
+import { autoRead, readQuestionButton } from './read.js';
+import { conjFacts, conjAfter } from './conj.js';
 import { S, voicePref, wordNode, plainWord, articleFor, playBtn, wordVoices, sentenceBtn, sentenceBlock, wordCard, voiceNote, readBtn, lab, fillSentence, segmentsAround, choices, afterCard, ipaLine, creditLine, qcIcon } from './parts.js';
 
 const prompt = (key, extra = null) => h('p', { class: 'prompt' }, lab(key), extra);
@@ -23,6 +25,8 @@ export function renderQuestion(it, ctx) {
   const tip = hintFor(it.k);
   const p = el.querySelector?.('.prompt');
   if (tip && p) p.after(tipNode(tip));
+  // auto-read mode: say the question as it appears (a listening question's recording waits for it)
+  autoRead(el, { listening: LISTENING.has(it.k) });
   return el;
 }
 function renderKind(it, ctx) {
@@ -33,6 +37,7 @@ function renderKind(it, ctx) {
     case 'word-say': return wordSay(it, ctx);
     case 'word-cloze': return gapSingle(it, ctx, { key: 'pGap' });
     case 'conj-pick': return gapSingle(it, ctx, { key: 'pForm', cue: conjCue });
+    case 'conj-drill': return conjDrill(it, ctx);
     case 'aux-pick': return gapSingle(it, ctx, { key: 'pAux', cue: (q) => `${t('pAux')} ${q.participle}` });
     case 'agree-pick': return gapSingle(it, ctx, { key: 'pAgree' });
     case 'pronoun-pick': return gapSingle(it, ctx, { key: 'pPronoun' });
@@ -52,7 +57,13 @@ function renderKind(it, ctx) {
   }
 }
 
-const card = (skill, ...kids) => h('section', { class: 'card qcard' }, skillChip(skill), ...kids);
+// The head row holds the skill and, at the right, the "read this question" button.
+const card = (skill, ...kids) => {
+  const sec = h('section', { class: 'card qcard' });
+  sec.append(h('div', { class: 'qhead' }, skillChip(skill), readQuestionButton(sec)), ...kids.filter(Boolean));   // (append(null) would print "null")
+  return sec;
+};
+const LISTENING = new Set(['word-listen', 'sentence-listen', 'spell-pick', 'sound-pair', 'qc-listen']);
 const done = (ctx, ok, { selfRated = false } = {}) => ctx.onAnswer(ok, { selfRated });
 const noSound = () => h('p', { class: 'warn' }, 'Ce téléphone n’a pas de voix française : le mot est affiché à la place.');
 const cueOf = (i) => D().cues?.[i];
@@ -154,7 +165,7 @@ function gapSingle(it, ctx, { key, cue = null }) {
   c.append(
     fillSentence({
       segs, answers: [it.answer], bank: shuffle([it.answer, ...it.options]), cap: segs[0] === '',
-      hint: h('p', { class: 'note' }, it.eng),
+      hint: h('p', { class: 'note translation' }, it.eng),
       onChecked: (ok) => {
         done(ctx, ok);
         const g = it.gid ? D().grammarById.get(it.gid) : null;
@@ -169,9 +180,29 @@ function gapSingle(it, ctx, { key, cue = null }) {
   return c;
 }
 
+// ── 5b. the conjugation drill: a pronoun, a verb and a tense; tap the form ──
+function conjDrill(it, ctx) {
+  const f = conjFacts(it);
+  const segs = segmentsAround(it.text, it.answer);
+  const c = card('grammar', prompt('pConj'),
+    h('p', { class: 'bigword' }, typo(f.inf)),
+    h('p', { class: 'gloss' }, f.gloss),
+    h('p', { class: 'cue' }, f.tenseFr + (f.person ? ` · ${f.person}` : '')));
+  if (!segs) { c.append(h('p', {}, 'Cette question n’a pas pu s’afficher.')); return c; }
+  c.append(fillSentence({
+    segs, answers: [it.answer], bank: shuffle([it.answer, ...it.options]), cap: segs[0] === '',
+    hint: h('p', { class: 'note translation' }, f.tenseEn),
+    onChecked: (ok) => {
+      done(ctx, ok);
+      c.append(afterCard([conjAfter(it)], { ...ctx, ok, answer: it.text.replace(/\s*!$/, '') }));
+    },
+  }));
+  return c;
+}
+
 // ── 6. several blanks: tap the words into place ──────────────────────────
 function fillMulti(it, ctx) {
-  const c = card('grammar', prompt('pGaps'), h('p', { class: 'note' }, it.eng));
+  const c = card('grammar', prompt('pGaps'), h('p', { class: 'note translation' }, it.eng));
   c.append(fillSentence({
     segs: it.segs, answers: it.answers, bank: it.bank, cap: it.segs[0] === '',
     onChecked: (ok, r) => {

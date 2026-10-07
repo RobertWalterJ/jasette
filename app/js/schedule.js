@@ -135,7 +135,9 @@ export const State = {
     // 80–85% target: first-try reviews only, not new cards or in-round repeats.
     day.n++; if (right) day.right++;
     if (wasReview && !repeat) { day.rn = (day.rn || 0) + 1; if (right) day.rr = (day.rr || 0) + 1; }
-    if (c.st === 'new' && !known) day.newN = (day.newN || 0) + 1;
+    // Conjugation drills have a daily allowance of their own (newC): they are a separate
+    // sitting with their own pace, so they neither spend nor wait on the words' allowance.
+    if (c.st === 'new' && !known) { const key = id.startsWith('cd/') ? 'newC' : 'newN'; day[key] = (day[key] || 0) + 1; }
 
     c.last = now();
     c.ok = right;
@@ -225,8 +227,8 @@ export const State = {
 // must ask this rather than count unseen questions: Home once promised
 // "5 new questions waiting" after the day's allowance was spent, and the round
 // it opened was empty (Robert, 19 Sept 2026).
-export function newLeftToday(pace = null) {
-  return Math.max(0, (pace?.newPerDay ?? NEW_PER_DAY) - (State.data.days[dayKey()]?.newN || 0));
+export function newLeftToday(pace = null, key = 'newN') {
+  return Math.max(0, (pace?.newPerDay ?? NEW_PER_DAY) - (State.data.days[dayKey()]?.[key] || 0));
 }
 
 export class Round {
@@ -242,7 +244,7 @@ export class Round {
   // `stageOf(id)`: which stage of the course a question belongs to, so new
   // material can lead with the stage being worked on rather than with whatever
   // the widened horizon happens to offer.
-  constructor(ids, { practice = false, exclude = new Set(), pace = null, groupOf = null, parasOf = null, stageOf = null, beyondDaily = false, perGroup = PER_GROUP, size = ROUND, spot = null } = {}) {
+  constructor(ids, { practice = false, exclude = new Set(), pace = null, groupOf = null, parasOf = null, stageOf = null, beyondDaily = false, perGroup = PER_GROUP, size = ROUND, spot = null, newKey = 'newN', capNew = false } = {}) {
     this.size = size;
     this.extra = new Set();
     // Spot checks: questions from stages the learner has said they have already
@@ -322,7 +324,7 @@ export class Round {
     if (stageOf) fresh.sort((a, b) => (stageOf(a) ?? 99) - (stageOf(b) ?? 99));
     // At most NEW_PER_DAY new a day: five "another round"s used to mean
     // twenty-five new questions and a wall of reviews tomorrow.
-    const newToday = State.data.days[dayKey()]?.newN || 0;
+    const newToday = State.data.days[dayKey()]?.[newKey] || 0;
     const perRound = pace?.newPerRound ?? NEW_PER_ROUND;
     const newRoom = beyondDaily ? Infinity : Math.max(0, (pace?.newPerDay ?? NEW_PER_DAY) - newToday);
     // New questions scale with the reviews waiting: five when little is due,
@@ -353,7 +355,8 @@ export class Round {
     // made the pack feel small (Robert, 18 Sept). Reserved here, before the
     // fill spends the round's budget on anything else.
     const again = [];
-    if (!practice && groupOf) {
+    // (not for the capped conjugation sitting: a "sibling" drill of the same verb is itself new, which would breach the allowance)
+    if (!practice && groupOf && !(capNew && !beyondDaily)) {
       for (const id of add) {
         if (again.length >= nAgain || picked.length >= size) break;
         const g = groupOf(id);
@@ -405,7 +408,8 @@ export class Round {
     // by when a question was last asked rotates through everything met, which
     // is what spacing across material actually means.
     fillWith(byAge(metAll.filter((id) => !exclude.has(id) && !cooling(id))));
-    if (picked.length < size) add.push(...take(fresh.filter((id) => !picked.includes(id)), size - picked.length));
+    // (`capNew`: the conjugation sitting keeps its allowance strictly; it does not top up with more new.)
+    if (picked.length < size && !(capNew && !beyondDaily)) add.push(...take(fresh.filter((id) => !picked.includes(id)), size - picked.length));
     fillWith(byAge(metAll.filter((id) => !exclude.has(id) && cooling(id))));
     // The last two steps re-ask something the learner has already seen today,
     // so they are only for a learner who asked to keep going. An ordinary

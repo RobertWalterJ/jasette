@@ -734,6 +734,145 @@ const grammar = GRAMMAR.map((g) => {
   return { id: g.id, title: g.title, fr: g.fr, plain: g.plain, watch: g.watch || null, drill: g.drill, stage: stageOfPoint.get(g.id) ?? null, examples: ex, endings: g.endings || undefined, sets: g.sets || undefined };
 });
 
+// ── 13b. the conjugation drill ───────────────────────────────────────────
+// "tu ____" + parler + présent. Built from the verb's own table, so nothing is invented, and
+// laid out as a ladder (content/conjugation.mjs): the commonest verbs and tenses first.
+//   - a compound tense is the auxiliary's own row plus the participle, so the table of
+//     avoir / être is the source for every "ai / as / a …";
+//   - only verbs that take ONE auxiliary are asked (passer, sortir, monter can take either, so
+//     "j'ai passé" would be a wrong "wrong answer");
+//   - an être verb is only asked where the participle's agreement is settled by the subject
+//     shown (il / elle / ils / elles);
+//   - the impératif is derived (tu drops the s of an -er verb), and the build re-derives it.
+const LADDER = await load('content/conjugation.mjs');
+const ETRE_VERBS = new Set(['aller', 'venir', 'arriver', 'partir', 'rester', 'tomber', 'naître', 'mourir', 'devenir', 'revenir', 'entrer']);
+const ASPIRATED_H = new Set(['haïr', 'hurler', 'heurter', 'hisser', 'hanter', 'harceler', 'hacher', 'hausser', 'harponner', 'hennir', 'honnir', 'happer', 'harasser']);
+const IMPERSONAL = new Set(['falloir', 'pleuvoir', 'neiger', 'venter', 'geler', 'bruiner', 'grêler']);   // "elle faut" is not French
+const IMP_SKIP = new Set(['pouvoir', 'vouloir', 'falloir', 'valoir', 'pleuvoir', 'devoir', 'mourir']);
+const DROP_S = new Set(['ouvrir', 'offrir', 'couvrir', 'souffrir', 'cueillir', 'accueillir', 'recueillir', 'découvrir', 'recouvrir', 'entrouvrir', 'aller']);
+const TENSE_LABEL = {
+  pr: ['présent', 'present'], im: ['imparfait', 'imperfect'], fu: ['futur', 'future'], co: ['conditionnel', 'conditional'], su: ['subjonctif', 'subjunctive'],
+  pc: ['passé composé', 'past (passé composé)'], pqp: ['plus-que-parfait', 'pluperfect'], fa: ['futur antérieur', 'future perfect'], cop: ['conditionnel passé', 'conditional perfect'],
+  sup: ['subjonctif passé', 'past subjunctive'], fp: ['futur proche', 'near future'], ip: ['impératif', 'imperative'],
+};
+const AUX_ROW = { pc: 'pr', pqp: 'im', fa: 'fu', cop: 'co', sup: 'su' };
+const bad = (f) => !f || f === '-';
+const idxOf = (l) => wordIndex.get(l);
+const vowelStart = (s) => /^[aeiouyàâäéèêëîïôöùûüœæh]/i.test(s);
+// "je" / "j'", "il" / "elle" / "on", with "que" before a subjunctive.
+const pronounFor = (slot, variant, next, subj) => {
+  const base = [['je'], ['tu'], ['il', 'elle', 'on'], ['nous'], ['vous'], ['ils', 'elles']][slot];
+  const p = base[variant % base.length];
+  if (subj) return p === 'je' ? (vowelStart(next) ? 'que j’' : 'que je ') : /^(il|elle|on|ils|elles)$/.test(p) ? 'qu’' + p + ' ' : 'que ' + p + ' ';
+  if (p === 'je' && vowelStart(next)) return 'j’';
+  return p + ' ';
+};
+const dropS = (w, row) => (w.w.endsWith('er') || DROP_S.has(w.w)) && row[1].endsWith('s') ? row[1].slice(0, -1) : row[1];
+const impForm = (w, slot) => {
+  const lem = w.w;
+  if (lem === 'être') return ['', 'sois', '', 'soyons', 'soyez'][slot];
+  if (lem === 'avoir') return ['', 'aie', '', 'ayons', 'ayez'][slot];
+  if (lem === 'savoir') return ['', 'sache', '', 'sachons', 'sachez'][slot];
+  return slot === 1 ? dropS(w, w.conj.pr) : slot === 3 ? w.conj.pr[3] : w.conj.pr[4];
+};
+const aux = (name, key, slot) => WORDS[idxOf(name)].conj[key]?.[slot];
+const ppAgree = (pp, slot, variant) => {
+  if (slot === 2) return variant === 1 ? pp + 'e' : pp;                      // il / elle (on stays masculine)
+  if (slot === 5) return variant === 1 ? pp + 'es' : /[sx]$/.test(pp) ? pp : pp + 's';
+  return pp;
+};
+// The whole form for one cell: { answer, wrongs[], pron, slot, variant } or null.
+function drillCell(w, tense, slot, variant) {
+  const c = w.conj, inf = w.w;
+  if (!c || !c.pp || c.pp === '-') return null;
+  const wrongPool = [];
+  let answer, subj = tense === 'su' || tense === 'sup';
+  if (['pr', 'im', 'fu', 'co', 'su'].includes(tense)) {
+    answer = c[tense][slot];
+    if (bad(answer)) return null;
+    const row = c[tense];
+    for (let k = 0; k < 6; k++) if (k !== slot) wrongPool.push(row[k]);
+    for (const t2 of ['pr', 'im', 'fu', 'co', 'su']) if (t2 !== tense) wrongPool.push(c[t2][slot]);
+  } else if (tense === 'ip') {
+    if (IMP_SKIP.has(inf) || ![1, 3, 4].includes(slot)) return null;
+    answer = impForm(w, slot);
+    if (bad(answer) || bad(c.pr[slot])) return null;
+    wrongPool.push(c.pr[slot], c.su[slot], c.pr[slot === 1 ? 4 : slot === 3 ? 4 : 3], c.pr[slot === 4 ? 3 : 1], c.fu[slot], c.im[slot]);
+  } else if (tense === 'fp') {
+    const go = aux('aller', 'pr', slot);
+    answer = `${go} ${inf}`;
+    wrongPool.push(`${aux('aller', 'pr', (slot + 1) % 6)} ${inf}`, `${aux('aller', 'pr', (slot + 3) % 6)} ${inf}`, `${go} ${c.pp}`, `${go} ${c.pr[slot]}`);
+  } else {
+    // a compound tense: auxiliary row + participle
+    const useEtre = ETRE_VERBS.has(inf);
+    if (!useEtre && w.aux !== 'avoir') return null;
+    if (useEtre && ![2, 5].includes(slot)) return null;
+    const key = AUX_ROW[tense];
+    const own = aux(useEtre ? 'être' : 'avoir', key, slot), other = aux(useEtre ? 'avoir' : 'être', key, slot);
+    if (bad(own) || bad(other)) return null;
+    const pp = useEtre ? ppAgree(c.pp, slot, variant) : c.pp;
+    answer = `${own} ${pp}`;
+    const o1 = aux(useEtre ? 'être' : 'avoir', key, (slot + 1) % 6), o2 = aux(useEtre ? 'être' : 'avoir', key, (slot + 3) % 6);
+    wrongPool.push(`${other} ${pp}`, inf.endsWith('er') && inf !== c.pp ? `${own} ${inf}` : `${o1} ${pp}`, `${o1} ${pp}`, `${o2} ${pp}`);
+    if (useEtre && pp !== c.pp) wrongPool.push(`${own} ${c.pp}`);
+    if (tense === 'pc') wrongPool.push(`${aux(useEtre ? 'être' : 'avoir', 'im', slot)} ${pp}`);
+  }
+  const wrongs = [];
+  for (const x of wrongPool) { if (x && !bad(x) && x !== answer && !wrongs.includes(x) && !String(x).includes('undefined')) wrongs.push(x); if (wrongs.length === 3) break; }
+  if (wrongs.length < 3) return null;
+  const next = answer;
+  const pron = tense === 'ip' ? '' : pronounFor(slot, variant, next, subj);
+  return { answer, wrongs, pron, slot, variant, subj };
+}
+const rankOf = (w) => w.r;
+const drillItems = [];
+const drillSeen = new Set();
+const SLOT_ORDER = [0, 1, 2, 3, 4, 5];
+const verbsForRung = (rg) => {
+  const v = rg.verbs;
+  const all = WORDS.map((w, i) => ({ w, i })).filter((x) => x.w.k === 'v' && x.w.conj);
+  if (v.only) return v.only.map((l) => all.find((x) => x.w.w === l)).filter(Boolean);
+  return all.filter(({ w }) => rankOf(w) <= v.maxRank && (v.kind === 'any' || (v.kind === 'er' ? regularEr(w) : !regularEr(w) && !v_only_used.has(w.w))));
+};
+const v_only_used = new Set(LADDER[0].verbs.only || []);
+for (const [rungIdx, rg] of LADDER.entries()) {
+  const stage = rg.stage;
+  for (const tense of rg.tenses) {
+    for (const { w, i } of verbsForRung(rg)) {
+      if (ASPIRATED_H.has(w.w) || IMPERSONAL.has(w.w)) continue;
+      // a rung with `perVerb` asks each verb in only that many of its tenses (a different pair per verb)
+      if (rg.perVerb && !shuffled(rg.tenses, seeded('pv' + w.w)).slice(0, rg.perVerb).includes(tense)) continue;
+      const rnd = seeded('cd' + w.w + tense);
+      const slots = tense === 'ip' ? [1, 3, 4] : SLOT_ORDER;
+      const start = Math.floor(rnd() * slots.length);
+      const order = slots.slice(start).concat(slots.slice(0, start));
+      let made = 0;
+      for (const slot of order) {
+        if (made >= rg.persons) break;
+        const key = `cd/${w.w}/${tense}/${slot}`;
+        if (drillSeen.has(key)) continue;
+        const variant = Math.floor(rnd() * 3);
+        const cell = drillCell(w, tense, slot, variant);
+        if (!cell) continue;
+        // distinct forms only: a verb whose "je" and "il" are the same string is asked once in the pair
+        const text = tense === 'ip' ? cell.answer + ' !' : cell.pron + cell.answer;
+        drillSeen.add(key);
+        // (the English for the question — the verb's gloss and the tense — is made in the app,
+        // and the blank is the answer, so neither is stored 10,000 times)
+        drillItems.push({
+          id: key, k: 'conj-drill', v: i, tense, slot, rung: rungIdx,
+          text, answer: cell.answer, options: cell.wrongs,
+          level: Math.min(9, rungIdx + 2), stageHint: stage,
+        });
+        made++;
+      }
+    }
+  }
+}
+items.push(...drillItems);
+const conjTenses = Object.fromEntries(Object.entries(TENSE_LABEL).map(([k, [fr, en]]) => [k, { fr, en }]));
+const conjLadder = LADDER.map((rg, n) => ({ id: rg.id, title: rg.title, en: rg.en, why: rg.why, tenses: rg.tenses, stage: rg.stage, n: drillItems.filter((x) => x.rung === n).length }));
+
 // ── 14. the stages, and where each question sits ─────────────────────────
 const stages = SYLLABUS.map((st) => ({
   id: st.id, title: st.title, en: st.en, cefr: st.cefr, can: st.can, why: st.why, gate: st.gate, grammar: st.grammar,
@@ -806,6 +945,7 @@ for (const [i, w] of WORDS.entries()) {
   }
 }
 for (const c of canDeck) if (c.audio && c.ok) wordAudio.push({ q: c.qc, a: 'qc', f: c.audio.f, mp3: c.audio.mp3 });
+for (const it of drillItems) delete it.level;                 // only needed to order them above
 mkdirSync(join(ROOT, 'app', 'data'), { recursive: true });
 const aidOf = new Map(SENT.filter((s) => s.a).map((s) => [s.id, s.a.aid]));
 const sentMeta = Object.fromEntries(SENT.filter((s) => audioSent.has(s.id) && s.a).map((s) => [s.id, { by: s.a.by, lic: s.a.lic }]));
@@ -826,7 +966,7 @@ const conj = {};
 for (const [i, w] of WORDS.entries()) if (w.conj && w.k === 'v') conj[i] = w.conj;
 const deck = {
   built: new Date().toISOString().slice(0, 10),
-  stages, words: wire, conj, endings: endingStats,
+  stages, words: wire, conj, conjLadder, conjTenses, endings: endingStats,
   examples, grammar, notes, cues,
   canadian: canDeck.filter((c) => c.ok).map((c) => ({ ...c, ok: undefined, audio: c.audio ? { by: c.audio.by, place: c.audio.place, f: c.audio.f, p: pathOf(c.audio.mp3) } : undefined })),
   homophones: Object.fromEntries(Object.entries(HOMO).map(([k, v]) => [k, { point: v.point, tip: v.tip, words: v.words }])),
