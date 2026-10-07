@@ -1,0 +1,7 @@
+node_modules/
+sources/
+corpus/
+build/_*
+app/data/
+app/audio/
+dist/

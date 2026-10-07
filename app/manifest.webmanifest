@@ -1,0 +1,18 @@
+{
+  "id": "/jasette/",
+  "name": "Jasette — le français, canadien d’abord",
+  "short_name": "Jasette",
+  "description": "Keep and extend your French — Québec and France, by ear, by eye and by hand.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "lang": "fr-CA",
+  "background_color": "#F5F8FD",
+  "theme_color": "#F5F8FD",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

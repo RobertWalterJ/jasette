@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="fr-CA" data-theme="fleurdelise" data-eff="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#F5F8FD">
+<title>Jasette — le français, canadien d’abord</title>
+<meta name="description" content="Keep and extend your French — Québec and France, by ear, by eye and by hand: spaced retrieval, recorded voices from both, and tap-to-fill sentences.">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="stylesheet" href="fonts/fonts.css">
+<link rel="stylesheet" href="style.css">
+<script>
+/* Before first paint: the saved palette, and light or dark as the phone prefers
+   (or as chosen). The app keeps these in step afterwards; this only stops the
+   page flashing the wrong colours while it loads. */
+(function () {
+  var theme = 'fleurdelise', scheme = 'auto';
+  try { var s = JSON.parse(localStorage.getItem('jasette.v1') || '{}').settings || {}; theme = s.theme || theme; scheme = s.scheme || scheme; if (s.big) document.documentElement.className = 'big'; } catch (e) {}
+  var dark = scheme === 'dark' || (scheme === 'auto' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+  var el = document.documentElement;
+  el.setAttribute('data-theme', theme); el.setAttribute('data-eff', dark ? 'dark' : 'light');
+})();
+</script>
+</head>
+<body>
+<div id="app"><main class="empty"><p>Chargement…</p></main></div>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>

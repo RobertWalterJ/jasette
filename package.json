@@ -1,0 +1,23 @@
+{
+  "name": "jasette",
+  "version": "1.0.0",
+  "description": "Jasette — keep and extend your French, Québec and France, by ear, by eye and by hand.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "corpus": "node build/extract.mjs && node build/senses.mjs && node build/words.mjs && node build/sentences.mjs && node build/canadian-src.mjs",
+    "audio": "node build/probe-audio.mjs && node build/items.mjs && node build/fetch-audio.mjs",
+    "items": "node build/items.mjs",
+    "verify": "node build/verify.mjs",
+    "check": "node build/verify.mjs && node build/test-verify.mjs && node build/audit-colour.mjs && node audits/run-dyslexia.mjs && node build/test-fade.mjs && node build/test-layout.mjs && node build/test-schedule.mjs && node build/test-keen.mjs",
+    "build": "npm run check && node build/make-deploy.mjs",
+    "dev": "node build/serve.mjs --app"
+  },
+  "devDependencies": {
+    "esbuild": "^0.23.0",
+    "sharp": "^0.35.5"
+  },
+  "dependencies": {
+    "ts-fsrs": "^5.4.2"
+  }
+}
