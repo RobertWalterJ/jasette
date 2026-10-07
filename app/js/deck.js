@@ -25,7 +25,7 @@ export const itemById = (id) => deck.byId.get(id);
 export const SKILL = {
   'word-listen': 'listening', 'sentence-listen': 'listening', 'sound-pair': 'listening', 'qc-listen': 'listening',
   'word-say': 'speaking', 'word-pick': 'speaking',
-  'word-read': 'reading', 'note-pick': 'reading',
+  'word-read': 'reading', 'note-pick': 'reading', 'idiom-mean': 'reading',
   'spell-pick': 'writing', 'homophone-pick': 'writing',
   'word-cloze': 'grammar', 'fill-multi': 'grammar', 'gender-pick': 'grammar', 'conj-pick': 'grammar', 'conj-drill': 'grammar', 'aux-pick': 'grammar', 'agree-pick': 'grammar',
   'pronoun-pick': 'grammar', 'grammar-build': 'grammar',
@@ -45,6 +45,9 @@ export function indexDeck() {
   deck.notesForWord = new Map();
   for (const n of deck.notes || []) for (const i of n.words) { if (!deck.notesForWord.has(i)) deck.notesForWord.set(i, []); deck.notesForWord.get(i).push(n); }
   deck.canIndex = new Map((deck.canadian || []).map((c, i) => [c.qc, i]));
+  // the expressions that hang on each word (shown on the word's card and when it is first taught)
+  deck.exprForWord = new Map();
+  for (const [n, x] of (deck.expressions || []).entries()) if (x.i != null) { if (!deck.exprForWord.has(x.i)) deck.exprForWord.set(x.i, []); deck.exprForWord.get(x.i).push(n); }
   // The word an item is about, used to keep two questions on one word out of
   // the same round.
   deck.groupOf = (id) => {
@@ -53,6 +56,7 @@ export function indexDeck() {
     if (it.i != null) return 'w' + it.i;
     if (it.v != null) return 'v' + it.v;                       // a conjugation drill: one per verb per round
     if (it.q != null) return 'q' + it.q;
+    if (it.x != null) return 'x' + it.x;                       // an expression
     if (it.gid) return 'g' + it.gid + (it.sid ? '/' + it.sid : '');
     if (it.choices) return 's' + it.id;
     return 's' + it.id;

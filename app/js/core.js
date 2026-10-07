@@ -1,25 +1,34 @@
 // Jasette — what the learner can answer, and what the course lets through.
 // Shared by the home screen, the round and the browsing screens.
 
-import { State, cardState, isHolding, newLeftToday } from './schedule.js';
+import { State, cardState, isHolding, newLeftToday, dayKey, now, DAY } from './schedule.js';
 import { D, stageState, askableIds, SKILL, SKILLS, drillIds } from './deck.js';
 import { canPlayAnything } from './audio.js';
 import { BANDS } from './placement.js';
 
+// A round is short on purpose: 15 to 20 questions, a few minutes. Up to 40 new questions a day
+// are READY (the pace below), but they arrive across as many rounds as the learner chooses to
+// do; one round a day simply means a slower 15 to 20 a day, with nothing owed or forced.
 export const SITTINGS = {
   short: { label: 'Courte', en: 'Short', note: 'Environ 12 questions', size: 12 },
+  standard: { label: 'Normale', en: 'Standard', note: 'De 15 à 20 questions — le réglage par défaut', size: 18 },
   five: { label: 'Cinq minutes', en: 'Five minutes', note: 'Environ 25 questions', size: 25 },
-  long: { label: 'Longue', en: 'Longer', note: 'Environ 40 questions — le réglage par défaut', size: 40 },
+  long: { label: 'Longue', en: 'Longer', note: 'Environ 40 questions', size: 40 },
 };
-export const sitting = () => SITTINGS[State.data.settings.sitting] || SITTINGS.long;
+// ("long" was the default in the first version; a learner who never chose it gets the standard length.)
+export const sitting = () => {
+  const s = State.data.settings;
+  if (s.sitting === 'long' && !s.sittingChosen) return SITTINGS.standard;
+  return SITTINGS[s.sitting] || SITTINGS.standard;
+};
 
 // These OVERRIDE the scheduler's own constants (Hok Gong's lesson: the app
 // shipped 18 new a day for a week after the constant was retuned to 32, because
 // a preset passed on every round won). They carry the numbers the app means.
 export const PACES = {
   gentle: { label: 'Tranquille', en: 'Gentle', note: 'Environ 15 nouveautés par jour', newPerRound: 5, newPerDay: 15 },
-  steady: { label: 'Régulier', en: 'Steady', note: '30 à 40 nouveautés par jour — le réglage par défaut', newPerRound: 13, newPerDay: 40 },
-  keen: { label: 'Intense', en: 'Keen', note: 'Jusqu’à 80 par jour : beaucoup de révisions les jours suivants', newPerRound: 22, newPerDay: 80 },
+  steady: { label: 'Régulier', en: 'Steady', note: 'Jusqu’à 40 nouveautés par jour, 15 à 20 si tu fais une seule série — le réglage par défaut', newPerRound: 9, newPerDay: 40 },
+  keen: { label: 'Intense', en: 'Keen', note: 'Jusqu’à 80 par jour : beaucoup de révisions les jours suivants', newPerRound: 14, newPerDay: 80 },
 };
 export const pace = () => PACES[State.data.settings.pace] || PACES.steady;
 export const noSpeaking = () => !!State.data.settings?.quiet;
@@ -83,7 +92,12 @@ export function conjState() {
   const skipped = State.data.settings?.conjOpen || 1;
   rungs.forEach((r, k) => {
     r.need = Math.min(Math.ceil(r.n * 0.5), NEED_CAP);
-    r.open = k === 0 || k < skipped || (rungs[k - 1].open && rungs[k - 1].met >= rungs[k - 1].need);
+    // A step opens when the one before is about half met AND going reasonably well (six in ten of
+    // what has been met answered right the last time): each block is built on the one under it.
+    const prev = rungs[k - 1];
+    r.open = k === 0 || k < skipped || (prev.open && prev.met >= prev.need && prev.can >= Math.ceil(prev.met * 0.6));
+    // where the learner stands on this step
+    r.level = r.met === 0 ? 'new' : r.met >= r.need && r.known >= r.met * 0.5 ? 'mastered' : r.met >= r.need && r.can >= r.met * 0.75 ? 'solid' : 'learning';
   });
   const open = rungs.filter((r) => r.open).length;
   return { rungs, open, current: Math.max(0, open - 1), total: rungs.length };
@@ -96,6 +110,11 @@ export function conjSize(opts = {}) {
   const due = State.dueIds(conjIds().filter(isMet)).length;
   const room = newLeftToday(conjPace(), 'newC');
   return Math.max(10, Math.min(sitting().size, due + room));
+}
+// How conjugation is going over time: this week's answers against last week's.
+export function conjTrend() {
+  const week = (from) => { let n = 0, right = 0; for (let k = from; k < from + 7; k++) { const d = State.data.days[dayKey(now() - k * DAY)]; if (d?.cn) { n += d.cn; right += d.cr || 0; } } return { n, right, pct: n ? Math.round((right / n) * 100) : null }; };
+  return { thisWeek: week(0), lastWeek: week(7) };
 }
 export function conjIds() {
   const cs = conjState();

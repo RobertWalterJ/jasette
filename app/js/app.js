@@ -25,6 +25,7 @@ import { autoRead, readQuestionButton, cancelReading, speakQueue } from './read.
 import { renderQuestion, skillChip } from './questions.js';
 import { SITTINGS, PACES, sitting, pace, noSpeaking, course, floorStage, inPlay, wordStates, isMet, likelyKnown, conjIds, conjPace, conjState, conjSize } from './core.js';
 import { conjScreen } from './conj.js';
+import { introFor, lessonCard, wordIntro, exprIntro } from './teach.js';
 import { Placement, BANDS } from './placement.js';
 import { courseScreen, wordsScreen, progressScreen, aboutScreen, wordSheet, canadianSheet } from './browse.js';
 import VERSIONS from './versions.js';
@@ -381,9 +382,15 @@ function roundScreen(arg) {
       flash(ok ? 'right' : 'wrong');
       paint();
     };
-    box.replaceChildren(renderQuestion(it, { onAnswer, onNext: ask, practice }));
-    window.scrollTo(0, 0);
-    paint();
+    const showQuestion = () => {
+      box.replaceChildren(renderQuestion(it, { onAnswer, onNext: ask, practice }));
+      window.scrollTo(0, 0);
+      paint();
+    };
+    // Teach before testing: a new word, an expression, or the first drill of a conjugation step
+    // gets a short card first (teach.js). It is not a question: nothing is scored or counted.
+    const intro = introFor(it, round, showQuestion);
+    if (intro) { box.replaceChildren(intro); window.scrollTo(0, 0); paint(); } else showQuestion();
   };
   ask();
   return [h('div', { class: 'roundbar' }, iconBtn('close', t('close'), leave), h('div', { class: 'progress', role: 'progressbar', 'aria-label': 'Progression de la série' }, prog), count), box];
@@ -511,7 +518,8 @@ function settingsScreen() {
       h('p', { class: 'note', style: 'margin-top:10px' }, `Voix du téléphone — Québec : ${vi.qc || 'aucune (la voix de France est utilisée)'} · France : ${vi.fr || 'aucune'}.`)),
     h('section', { class: 'card' },
       h('h2', { style: 'font-size:1.2rem;margin-bottom:8px' }, lab('rhythm')),
-      h('div', { class: 'srow col' }, h('div', { class: 'slabel' }, t('sitting')), h('div', { class: 'seg' }, ...Object.entries(SITTINGS).map(([k, v]) => h('button', { type: 'button', 'aria-pressed': (s.sitting || 'long') === k ? 'true' : 'false', onclick: (e) => { s.sitting = k; State.save(); for (const b of e.currentTarget.parentElement.children) b.setAttribute('aria-pressed', 'false'); e.currentTarget.setAttribute('aria-pressed', 'true'); } }, v.label)))),
+      row(lab('teachNew'), 'A short card before a new word or expression is first asked: its meaning, sound, examples and, for a verb, its present tense and which form each example uses. (Conjugation lessons are always shown.)', toggle('teachNew', s.teachNew !== false)),
+      h('div', { class: 'srow col' }, h('div', { class: 'slabel' }, t('sitting')), h('div', { class: 'seg' }, ...Object.entries(SITTINGS).map(([k, v]) => h('button', { type: 'button', 'aria-pressed': (SITTINGS[k] === sitting()) ? 'true' : 'false', onclick: (e) => { s.sitting = k; s.sittingChosen = true; State.save(); for (const b of e.currentTarget.parentElement.children) b.setAttribute('aria-pressed', 'false'); e.currentTarget.setAttribute('aria-pressed', 'true'); } }, v.label)))),
       h('div', { class: 'srow col' }, h('div', { class: 'slabel' }, t('pace')), h('div', { class: 'note' }, 'Ce que tu choisis, c’est le nombre de nouveautés ; les révisions arrivent quand elles sont dues.'),
         h('div', { class: 'seg' }, ...Object.entries(PACES).map(([k, v]) => h('button', { type: 'button', 'aria-pressed': (s.pace || 'steady') === k ? 'true' : 'false', onclick: (e) => { s.pace = k; State.save(); for (const b of e.currentTarget.parentElement.children) b.setAttribute('aria-pressed', 'false'); e.currentTarget.setAttribute('aria-pressed', 'true'); } }, v.label))))),
     h('section', { class: 'card' },
@@ -542,7 +550,7 @@ async function boot() {
   }
   route('today', homeScreen);
   route('course', courseScreen);
-  route('conj', () => conjScreen({ header, start: startConjRound, refresh: repaint }));
+  route('conj', () => conjScreen({ header, start: startConjRound, refresh: repaint, openLesson: (n) => sheet(lessonCard(n, () => closeSheet(), { replay: true })) }));
   route('words', wordsScreen);
   route('progress', progressScreen);
   route('settings', settingsScreen, { tabs: false });
@@ -556,6 +564,31 @@ async function boot() {
     window.J = { D, State, show, ask: (id) => show('q', { id }), kinds: () => [...new Set(D().items.map((i) => i.k))] };
     // J.sweep(): render the first question of every kind (and a handful more of each) and report
     // anything that looks wrong: a stray "null"/"undefined" in the text, no read button, no way to answer.
+    // J.teach(): render every lesson, every expression card and a sample of new-word cards (verbs
+    // included) and report stray text, an empty card, or a lesson table with no rows.
+    // J.card('word', i) / J.card('expr', n) / J.card('lesson', n): put one teaching card on screen to look at.
+    window.J.card = (kind, n) => {
+      const node = kind === 'word' ? wordIntro({ i: n }, () => {}) : kind === 'expr' ? exprIntro({ x: n }, () => {}) : lessonCard(n, () => {});
+      document.querySelector('main')?.replaceChildren(node);
+      window.scrollTo(0, 0);
+    };
+    window.J.teach = () => {
+      const bad = [];
+      let n = 0;
+      const look = (what, el, { minTables = 0 } = {}) => {
+        n++;
+        const text = el.textContent;
+        const stray = text.match(/\b(null|undefined|NaN)\b|\[object/);
+        if (stray) bad.push(`${what}: stray text "${stray[0]}"`);
+        if (text.length < 60) bad.push(`${what}: nearly empty`);
+        if (el.querySelectorAll('table').length < minTables) bad.push(`${what}: expected ${minTables} table(s), has ${el.querySelectorAll('table').length}`);
+      };
+      for (const [k, r] of D().conjLadder.entries()) look('lesson ' + r.id, lessonCard(k, () => {}), { minTables: r.teach.model != null ? 1 : 0 });
+      for (const k of D().expressions.keys()) look('expression ' + D().expressions[k].id, exprIntro({ x: k }, () => {}));
+      const words = D().words.map((w, i) => ({ w, i })).filter(({ w }) => w.k === 'v' || w.k === 'n');
+      for (const { i } of [...words.filter(({ w }) => w.k === 'v').slice(0, 60), ...words.filter(({ w }) => w.k === 'n').slice(0, 30)]) look('word ' + D().words[i].w, wordIntro({ i }, () => {}));
+      return { checked: n, problems: bad };
+    };
     window.J.sweep = async (per = 3) => {
       const bad = [];
       let n = 0;

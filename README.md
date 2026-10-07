@@ -41,6 +41,22 @@ by finding where you stand and then spends its teaching on what is new.
   `build/verify.mjs` re-derives every answer independently (helper, participle
   agreement, elision, the imperative's dropped s) and `test-verify.mjs` breaks five
   of those rules on purpose.
+- **Taught before it is tested.** A new word gets a card first (meaning, both accents,
+  example sentences; for a verb its present tense and *which form* each example sentence
+  uses: “est apparu” = passé composé of apparaître, read from the verb's own table by
+  `app/js/forms.js` and tested in `build/test-forms.mjs`). Each conjugation step opens with
+  a lesson (what the tense is for, how it is made, what to watch for, a worked model verb) that
+  shows which earlier steps it is **built on** and how you are doing on them; a step opens when
+  the one before is half met and going well, and shows Learning / Solid / Mastered and a weekly
+  trend.
+- **Odd usages, explained.** Phrases whose words don't add up (*avoir du bol*, *poser un
+  lapin*, *tomber dans les pommes*): 23 of them, each one a question and a card with the
+  word-for-word reading and the explanation. The meaning must be one English Wiktionary gives
+  (`build/lib/expressions.mjs`, checked again by verify), an origin is claimed only if the head
+  word's Wiktionary etymology says it, and where nobody knows why (as with *bol* and *pot*)
+  the card says so.
+- **Short rounds.** 18 questions a round; up to 40 new a day on offer across several rounds,
+  or a slower 15–20 a day if you do one. Nothing is forced.
 - **Read aloud, three ways**: a speaker beside every choice, an *À voix haute* button on every
   question, and an auto-read mode that says each question as it appears (and, if
   wanted, the answer afterwards). Any touch stops it.
@@ -72,12 +88,15 @@ not committed; `SOURCES.md` says where each comes from.
 
 | gate | what it checks |
 |---|---|
-| `build/verify.mjs` | ~460,000 checks: every gloss is one Wiktionary gives; every gender is one Lexique and Wiktionary agree on; every conjugated form is in Wiktionary's table; every sentence is Tatoeba's, suitable, and every recording exists and is credited; no question has two right answers; every grammar point has a question; every Canadian claim is Wiktionary's; every French word in the interface is a spelling Lexique knows |
-| `build/test-verify.mjs` | breaks fourteen things on purpose and requires all fourteen to be caught |
+| `build/verify.mjs` | ~550,000 checks (including every conjugation drill re-derived independently, every expression re-checked against Wiktionary, every lesson's "builds on" link): every gloss is one Wiktionary gives; every gender is one Lexique and Wiktionary agree on; every conjugated form is in Wiktionary's table; every sentence is Tatoeba's, suitable, and every recording exists and is credited; no question has two right answers; every grammar point has a question; every Canadian claim is Wiktionary's; every French word in the interface is a spelling Lexique knows |
+| `build/test-verify.mjs` | breaks 24 things on purpose and requires all 24 to be caught |
 | `build/audit-colour.mjs` | no meaning rides on hue alone, in six palettes, under deuteranopia, protanopia, tritanopia or no colour at all |
 | `audits/run-dyslexia.mjs` | no capitals, no centred prose, no fast timers, read-aloud throughout, an off-white page |
+| `build/test-voices.mjs` | French is only ever read by a French voice ("English (Canada)" is not one) |
+| `build/test-forms.mjs` | the tense a form in an example sentence is said to be is the right one |
+| `build/test-budget.mjs` | every recording is on the phone, cached and trimmable, or streamed; the budgets hold |
 | `build/test-layout.mjs` | nothing wider than a 320px phone |
-| `build/test-schedule.mjs` | plays 90 days, twice (from the start; placed at stage 4) against the app's own `core.js`: no repeats, full rounds, 30+ new a day, bounded backlog, spot checks that graduate |
+| `build/test-schedule.mjs` | plays 180 days (from the start; placed at stage 4; a casual learner; with a daily conjugation sitting) against the app's own `core.js`: no repeats, full rounds, 30+ new a day, bounded backlog, spot checks that graduate |
 | `build/test-keen.mjs` | eight rounds back to back must all come up full |
 
 ## What it cannot do

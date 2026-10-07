@@ -9,7 +9,7 @@ import { h, typo, ICON } from './ui.js';
 import { State } from './schedule.js';
 import { D } from './deck.js';
 import { t } from './strings.js';
-import { conjState, conjIds, conjPerDay, skipConjAhead, CONJ_PER_DAY, isMet } from './core.js';
+import { conjState, conjIds, conjPerDay, skipConjAhead, CONJ_PER_DAY, isMet, conjTrend } from './core.js';
 import { newLeftToday } from './schedule.js';
 import { lab } from './parts.js';
 
@@ -30,8 +30,31 @@ export function conjFacts(it) {
   };
 }
 
-const ctable = (rows, hot = -1) => h('table', { class: 'ctable' }, h('tbody', {}, ...rows.map(([p, f], k) =>
+export const ctable = (rows, hot = -1) => h('table', { class: 'ctable' }, h('tbody', {}, ...rows.map(([p, f], k) =>
   h('tr', { class: k === hot ? 'hot' : '' }, h('td', { class: 'p' }, p), h('td', { class: 'f' }, typo(f))))));
+
+export const ETRE_VERBS = ['aller', 'venir', 'arriver', 'partir', 'rester', 'tomber', 'naître', 'mourir', 'devenir', 'revenir', 'entrer'];
+// "je", "j’", with "que" before a subjunctive: the pronoun as it is written before this form.
+const withPronoun = (slot, form, subj = false) => {
+  const vowel = /^[aeiouyàâäéèêëîïôöùûüœæh]/i.test(form);
+  const base = ['je', 'tu', 'il', 'nous', 'vous', 'ils'][slot];
+  if (subj) return slot === 0 ? (vowel ? 'que j’' : 'que je ') + form : slot === 2 || slot === 5 ? `qu’${base} ${form}` : `que ${base} ${form}`;
+  return slot === 0 && vowel ? `j’${form}` : `${base} ${form}`;
+};
+// The six rows of one tense of one verb, as a table would show them: [[label, form]]. For a compound
+// tense the helper’s row plus the participle; null if the verb has no such table.
+export function modelRows(vi, tense) {
+  const d = D(), c = d.conj[vi];
+  if (!c) return null;
+  if (['pr', 'im', 'fu', 'co', 'su'].includes(tense)) return c[tense].map((f, k) => [(tense === 'su' ? 'que ' : '') + PERSON[k], f]);
+  if (COMPOUND.has(tense)) {
+    const etre = ETRE_VERBS.includes(d.words[vi].w);
+    const row = d.conj[d.wordIndex.get(etre ? 'être' : 'avoir')][AUX_ROW[tense]];
+    return row.map((f, k) => [PERSON[k], `${f} ${c.pp}`]);
+  }
+  return null;
+}
+export const elide = withPronoun;
 
 // The pattern behind an answer.
 export function conjAfter(it) {
@@ -59,8 +82,10 @@ export function conjAfter(it) {
 }
 
 // ── the Conjugaison screen ───────────────────────────────────────────────
-export function conjScreen({ header, start, refresh }) {
+const LEVEL = { new: ['Not started', ''], learning: ['Learning', ''], solid: ['Solid', 'accent'], mastered: ['Mastered', 'accent'] };
+export function conjScreen({ header, start, refresh, openLesson }) {
   const cs = conjState();
+  const trend = conjTrend();
   const ids = conjIds();
   const due = State.dueIds(ids.filter(isMet)).length;
   const room = newLeftToday({ newPerDay: conjPerDay() }, 'newC');
@@ -77,12 +102,15 @@ export function conjScreen({ header, start, refresh }) {
   cs.rungs.forEach((r, n) => {
     const state = !r.open ? 'later' : r.met >= r.need ? 'done' : 'here';
     const pct = r.n ? Math.round((r.met / r.n) * 100) : 0;
+    const prevName = n > 0 ? cs.rungs[n - 1].title : null;
     const body = h('div', { class: 'card' + (state === 'done' ? ' flat' : '') },
-      h('h3', {}, r.title),
+      h('h3', {}, r.title, r.open ? h('span', { class: 'cefr' }, LEVEL[r.level][0]) : null),
       h('p', { class: 'note' }, r.en),
+      r.builds?.length ? h('p', { class: 'note' }, h('b', {}, 'Builds on: '), r.builds.map((b) => cs.rungs[b].title.replace(/^L[ae]s? /, '')).join(' · ')) : null,
       r.open ? h('div', {}, h('div', { class: 'meter' }, h('i', { style: `width:${pct}%` })),
-        h('p', { class: 'note' }, `${r.met} of ${r.n} questions met` + (r.open && r.met < r.need ? ` · the next step opens at ${r.need}` : ''))) : h('p', { class: 'note' }, `${r.n} questions · opens when the step before is about half done`),
-      h('p', { class: 'note' }, r.why));
+        h('p', { class: 'note' }, `${r.met} of ${r.n} questions met, ${r.can} answered right last time` + (r.met < r.need ? ` · the next step opens at ${r.need} met` : ''))) : h('p', { class: 'note' }, `${r.n} questions · opens when “${prevName}” is about half met and going well`),
+      h('p', { class: 'note' }, r.why),
+      r.open || n === 0 ? h('button', { class: 'btn ghost wide', type: 'button', style: 'margin-top:8px', onclick: () => openLesson(n) }, 'Read the lesson') : null);
     if (!r.open && !skipShown) {
       skipShown = true;
       body.append(h('button', { class: 'btn ghost wide', type: 'button', style: 'margin-top:8px', onclick: () => { skipConjAhead(); refresh(); } }, 'I already know the steps before this — open it now'));
@@ -100,6 +128,11 @@ export function conjScreen({ header, start, refresh }) {
       h('p', { class: 'note' }, 'Wrong guesses are fine. A form you miss comes round again, and after every answer you see the whole pattern that form came from.'),
       h('button', { class: 'start', type: 'button', onclick: go }, h('span', {}, label, h('span', { class: 'sub' }, subline)), h('span', { html: ICON.chev })),
       total ? h('p', { class: 'note', style: 'margin-top:10px' }, `${total} questions met so far · step ${cs.open} of ${cs.total} open.`) : null),
+    trend.thisWeek.n || trend.lastWeek.n ? h('section', { class: 'card flat' },
+      h('p', { class: 'eyebrow' }, 'Getting better'),
+      h('p', {}, trend.thisWeek.n ? `This week: ${trend.thisWeek.pct}% right over ${trend.thisWeek.n} answers.` : 'Nothing answered yet this week.',
+        trend.lastWeek.n ? ` Last week: ${trend.lastWeek.pct}% over ${trend.lastWeek.n}.` : ''),
+      trend.thisWeek.n >= 10 && trend.lastWeek.n >= 10 ? h('p', { class: 'note' }, trend.thisWeek.pct > trend.lastWeek.pct ? 'Up on last week. The patterns are starting to stick.' : trend.thisWeek.pct === trend.lastWeek.pct ? 'Steady. New material keeps arriving, so holding level is progress.' : 'A little down on last week, which is normal when new steps open. The forms you miss will come round again.') : null) : null,
     h('section', { class: 'card' },
       h('div', { class: 'srow col', style: 'border:0' }, h('div', {}, h('div', { class: 'slabel' }, 'New questions a day'), h('div', { class: 'note' }, 'Separate from the words: conjugation has its own allowance.')), paceSeg)),
     h('p', { class: 'eyebrow', style: 'margin:18px 4px 6px' }, 'The steps, most useful first'),

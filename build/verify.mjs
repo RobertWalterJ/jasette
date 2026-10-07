@@ -249,6 +249,64 @@ export async function verify(deck, src) {
     ok(!!set && set.words.some((x) => x.w === it.answer) && it.options.every((o) => set.words.some((x) => x.w === o)), `${it.id}: not drawn from the set ${it.set}`);
   }
 
+  // ── what is taught before it is tested ─────────────────────────────────
+  // Every lesson: prose present, a model verb whose table has the rows it shows, and "builds on"
+  // links that only ever point at EARLIER steps (so each step stands on what was already taught).
+  {
+    const ladder = deck.conjLadder || [];
+    for (const [n, r] of ladder.entries()) {
+      const t = r.teach;
+      ok(!!t && [t.what, t.build, t.watch].every((x) => typeof x === 'string' && x.length > 40), `lesson ${r.id}: the explanation is missing or too thin`);
+      ok(typeof r.uses === 'string' && r.uses.length > 10, `lesson ${r.id}: no "what this builds on" line`);
+      ok(Array.isArray(r.builds) && r.builds.every((b) => Number.isInteger(b) && b >= 0 && b < n), `lesson ${r.id}: it builds on a step that is not an earlier one`);
+      if (n > 0) ok(r.builds.length >= 1, `lesson ${r.id}: every step after the first builds on something`);
+      if (t?.model != null) {
+        const c = deck.conj[t.model];
+        ok(deck.words[t.model]?.k === 'v' && !!c, `lesson ${r.id}: the model is not a verb with a table`);
+        for (const tense of t.show || []) {
+          const hasRows = ['pr', 'im', 'fu', 'co', 'su'].includes(tense) ? Array.isArray(c?.[tense]) && c[tense].length === 6 : !!c?.pp;
+          ok(hasRows, `lesson ${r.id}: the model verb has no ${tense} table`);
+        }
+      }
+      for (const vi of t?.words || []) ok(deck.words[vi]?.k === 'v' && !!deck.conj[vi]?.pp, `lesson ${r.id}: a listed verb has no table`);
+      // the lesson's tenses are the rung's own (or the present, for a step that rests on it)
+      ok((t?.show || []).every((x) => deck.conjTenses[x]), `lesson ${r.id}: it shows a tense the deck does not know`);
+    }
+    ok(ladder.length === src.LADDER.length, 'the deck ladder and content/conjugation.mjs have different lengths');
+    ok(src.LADDER.every((r) => !!src.LESSONS[r.id] && !!src.BUILDS[r.id]), 'a ladder step has no lesson or no "builds on"');
+  }
+  // Expressions: Wiktionary must back each meaning (the build left out any it did not), a note about
+  // an origin must be one the head word's etymology supports, and each question has three other meanings.
+  {
+    const exprs = deck.expressions || [];
+    const known = new Map(src.EXPR.map((e) => [e.id, e]));
+    ok(exprs.length >= 15, `only ${exprs.length} expressions reached the deck`);
+    for (const x of exprs) {
+      const e = known.get(x.id);
+      ok(!!e, `expression ${x.id}: not in content/expressions.mjs`);
+      if (!e) continue;
+      for (const w of e.wik) {
+        const re = new RegExp(w.has, 'i');
+        ok((src.EXPR_SRC[w.word] || []).flatMap((en) => en.senses).some((s) => re.test(s.g)), `expression "${x.fr}": Wiktionary has no sense of "${w.word}" like /${w.has}/`);
+      }
+      if (e.etym) {
+        const text = (src.EXPR_SRC[e.etym.word] || []).map((en) => en.etym).join(' ').toLowerCase();
+        for (const k of e.etym.says) ok(text.includes(k.toLowerCase()), `expression "${x.fr}": the etymology of "${e.etym.word}" does not mention "${k}"`);
+      }
+      ok(x.en === e.en && x.literal === e.literal && x.note === e.note, `expression ${x.id}: the deck differs from content/expressions.mjs`);
+      ok(typeof x.note === 'string' && x.note.length > 60 && !!x.literal, `expression ${x.id}: no explanation`);
+      if (x.i != null) ok(deck.words[x.i]?.w !== undefined, `expression ${x.id}: no such word`);
+      if (x.ex) ok(src.EXPR_SRC[e.wik[0].word]?.some((en) => en.senses.some((s) => (s.ex || []).some((y) => y.t === x.ex.t))), `expression ${x.id}: the example is not Wiktionary's`);
+    }
+    for (const it of deck.items.filter((q) => q.k === 'idiom-mean')) {
+      const x = exprs[it.x];
+      ok(!!x, `${it.id}: no such expression`);
+      if (!x) continue;
+      ok(it.options.length === 3 && new Set([x.en, ...it.options]).size === 4, `${it.id}: needs three different other meanings`);
+      ok(!it.options.some((o) => overlap(kw(o), kw(x.en))), `${it.id}: an option shares a meaning with the answer`);
+    }
+  }
+
   // ── the course ─────────────────────────────────────────────────────────
   ok(deck.stages.length === SYLLABUS.length, 'the number of stages differs from the syllabus');
   for (const [n, st] of deck.stages.entries()) {
@@ -320,6 +378,9 @@ async function sources() {
     ALIVE: new Set(existsSync(join(ROOT, 'corpus/audio-ok.json')) ? read('corpus/audio-ok.json') : []),
     HAND: await load('content/glosses.mjs'), SYLLABUS: await load('content/syllabus.mjs'), NOTES: await load('content/notes.mjs'), HOMO: await load('content/homophones.mjs'),
     CANADIAN: await load('content/canadian.mjs'), GRAMMAR: await load('content/grammar.mjs'),
+    EXPR: await load('content/expressions.mjs'), EXPR_SRC: existsSync(join(ROOT, 'corpus/expressions-src.json')) ? read('corpus/expressions-src.json') : {},
+    LADDER: await load('content/conjugation.mjs'), LESSONS: await load('content/conjugation-lessons.mjs'),
+    BUILDS: (await import(pathToFileURL(join(ROOT, 'content/conjugation-lessons.mjs')).href)).BUILDS,
     STRINGS: (await import(pathToFileURL(join(ROOT, 'app/js/strings.js')).href)).STRINGS,
     unsuitable: (await import(pathToFileURL(join(ROOT, 'content/unsuitable.mjs')).href)).unsuitable,
   };

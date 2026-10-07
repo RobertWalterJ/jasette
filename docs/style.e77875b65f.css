@@ -222,6 +222,10 @@ button { font: inherit; color: inherit; background: none; border: 0; padding: 0;
 .chip { display: inline-flex; align-items: center; gap: 6px; min-height: 30px; padding: 0 var(--s3); border-radius: 999px; background: var(--chip); font-size: .8rem; font-weight: 700; color: var(--ink); }
 .chip svg { width: 14px; height: 14px; }
 .chip.accent { background: var(--tint); color: var(--accent); }
+.gpoint .chip { background: var(--card); border: 1px solid var(--line); }
+.gpoint .chip.accent { background: var(--card); border-color: var(--accent); }
+.gpoint.expr h3 { display: flex; align-items: center; gap: 8px; }
+.formsnote { margin: 6px 0 12px; padding-left: 10px; border-left: 3px solid var(--line); }
 .chips { display: flex; flex-wrap: wrap; gap: var(--s2); }
 
 /* ── home ────────────────────────────────────────────────────────────── */

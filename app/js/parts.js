@@ -112,6 +112,21 @@ export function sentenceBlock({ text, eng, sid = null, hasAudio = false, qc = fa
   return wrap;
 }
 
+// ── an expression: a phrase whose words do not add up ───────────────────
+// "avoir du bol": the phrase, what it means, what the words say literally, and why (as far as the
+// sources say). The meaning is Wiktionary's; the explanation is mine and says when no origin is known.
+export function exprCard(x, { head = true } = {}) {
+  const parts = [
+    head ? h('h3', {}, typo(x.fr), readBtn(x.fr)) : null,
+    h('p', {}, h('b', {}, x.en), x.reg ? h('span', { class: 'reg' }, x.reg === 'fam' ? 'familier' : x.reg) : null),
+    h('p', { class: 'note' }, 'Word for word: ', h('i', {}, x.literal)),
+    h('p', {}, x.note),
+    x.ex ? sentenceBlock({ text: x.ex.t, eng: x.ex.e }) : null,
+    h('p', { class: 'evidence' }, 'Le sens vient de Wiktionary (CC BY-SA) ; l’explication est de moi.'),
+  ];
+  return h('div', { class: 'gpoint expr' }, ...parts.filter(Boolean));
+}
+
 // ── the word card ────────────────────────────────────────────────────────
 export function ipaLine(w) {
   const bits = [];
@@ -137,7 +152,8 @@ export function wordCard(i, { example = true, voices = true } = {}) {
     voices ? note : null,
     ex && example ? sentenceBlock({ text: ex.t, eng: ex.e, sid: ex.id, hasAudio: !!ex.a, qc: !!ex.qc }) : null,
     notes.length ? h('div', { class: 'gpoint' }, h('h3', {}, notes[0].title, readBtn(notes[0].plain)), h('p', {}, notes[0].plain), notes[0].watch ? h('p', { class: 'watch' }, notes[0].watch) : null,
-      h('p', { class: 'evidence' }, 'Les mots et leurs sens viennent des sources ; ce conseil d’emploi est de moi.')) : null);
+      h('p', { class: 'evidence' }, 'Les mots et leurs sens viennent des sources ; ce conseil d’emploi est de moi.')) : null,
+    ...(d.exprForWord?.get(i) || []).map((n) => h('div', {}, h('p', { class: 'eyebrow', style: 'margin-top:14px' }, 'An expression with this word'), exprCard(d.expressions[n]))));
 }
 
 // ── tap-to-fill: the word bank ───────────────────────────────────────────

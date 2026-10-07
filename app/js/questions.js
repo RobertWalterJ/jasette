@@ -14,7 +14,7 @@ import { asrSupported, listenFor, matches } from './asr.js';
 import { hintFor, tipNode } from './help.js';
 import { autoRead, readQuestionButton } from './read.js';
 import { conjFacts, conjAfter } from './conj.js';
-import { S, voicePref, wordNode, plainWord, articleFor, playBtn, wordVoices, sentenceBtn, sentenceBlock, wordCard, voiceNote, readBtn, lab, fillSentence, segmentsAround, choices, afterCard, ipaLine, creditLine, qcIcon } from './parts.js';
+import { S, voicePref, wordNode, plainWord, articleFor, playBtn, wordVoices, sentenceBtn, sentenceBlock, wordCard, voiceNote, readBtn, lab, fillSentence, segmentsAround, choices, afterCard, ipaLine, creditLine, qcIcon, exprCard } from './parts.js';
 
 const prompt = (key, extra = null) => h('p', { class: 'prompt' }, lab(key), extra);
 const SKILL_ICON = { listening: 'ear', speaking: 'mic', reading: 'eye', writing: 'pen', grammar: 'puzzle', canada: 'fleur' };
@@ -38,6 +38,7 @@ function renderKind(it, ctx) {
     case 'word-cloze': return gapSingle(it, ctx, { key: 'pGap' });
     case 'conj-pick': return gapSingle(it, ctx, { key: 'pForm', cue: conjCue });
     case 'conj-drill': return conjDrill(it, ctx);
+    case 'idiom-mean': return idiomMean(it, ctx);
     case 'aux-pick': return gapSingle(it, ctx, { key: 'pAux', cue: (q) => `${t('pAux')} ${q.participle}` });
     case 'agree-pick': return gapSingle(it, ctx, { key: 'pAgree' });
     case 'pronoun-pick': return gapSingle(it, ctx, { key: 'pPronoun' });
@@ -177,6 +178,19 @@ function gapSingle(it, ctx, { key, cue = null }) {
         ], { ...ctx, ok, answer: it.answer }));
       },
     }));
+  return c;
+}
+
+// ── 5a. an expression: what does the whole phrase mean? ──────────────────
+function idiomMean(it, ctx) {
+  const x = D().expressions[it.x];
+  const c = card('reading', prompt('pIdiom'),
+    h('p', { class: 'bigword' }, typo(x.fr)),
+    x.reg === 'fam' ? h('p', { class: 'cue' }, 'familier') : null);
+  c.append(choices(it.options, x.en, (ok) => {
+    done(ctx, ok);
+    c.append(afterCard([exprCard(x, { head: false })], { ...ctx, ok, answer: x.en }));
+  }));
   return c;
 }
 

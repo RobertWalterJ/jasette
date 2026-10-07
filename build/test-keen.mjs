@@ -44,7 +44,7 @@ const fails = [];
 
 function evening(label, floor) {
   store.clear();
-  S.State.data = { v: 1, cards: {}, days: {}, settings: { sound: true, theme: 'fleurdelise', scheme: 'auto', voice: 'qc', lang: 'both', pace: 'steady', sitting: 'long' }, placement: null };
+  S.State.data = { v: 1, cards: {}, days: {}, settings: { sound: true, theme: 'fleurdelise', scheme: 'auto', voice: 'qc', lang: 'both', pace: 'steady', sitting: 'standard' }, placement: null };
   if (floor) { S.State.data.placement = { at: 0, floor, size: 3000, asked: 30, proportions: [] }; S.State.data.maxStage = floor; }
   let t = new Date(2026, 8, 20, 16, 30).getTime();
   S.__setClock(() => t);

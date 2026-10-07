@@ -870,8 +870,46 @@ for (const [rungIdx, rg] of LADDER.entries()) {
   }
 }
 items.push(...drillItems);
+// The lessons that teach each step, and the model verb each one shows.
+const LESSONS = await load('content/conjugation-lessons.mjs');
+const BUILDS = (await import(pathToFileURL(join(ROOT, 'content', 'conjugation-lessons.mjs')).href)).BUILDS;
+LADDER.forEach((rg, n) => {
+  const b = BUILDS[rg.id];
+  if (!b) throw new Error('no "builds on" for ' + rg.id);
+  for (const f of b.from) if (LADDER.findIndex((x) => x.id === f) >= n || LADDER.findIndex((x) => x.id === f) < 0) throw new Error(`${rg.id} builds on ${f}, which is not an earlier step`);
+});
+for (const rg of LADDER) if (!LESSONS[rg.id]) throw new Error('no lesson for the conjugation step ' + rg.id);
+
+// ── 13c. expressions and odd usages ──────────────────────────────────────
+// "avoir du bol" — to be lucky. Only expressions English Wiktionary backs (build/lib/expressions.mjs)
+// are kept, and a note about an origin is kept only if the head word's etymology says it.
+const { backing, exampleFor } = await import(pathToFileURL(join(ROOT, 'build', 'lib', 'expressions.mjs')).href);
+const EXPR = await load('content/expressions.mjs');
+const EXPR_SRC = existsSync(join(ROOT, 'corpus', 'expressions-src.json')) ? read('expressions-src.json') : {};
+const exprDeck = [];
+for (const e of EXPR) {
+  const why = backing(e, EXPR_SRC);
+  if (why.length) { console.log(`  expression left out (Wiktionary does not back it): ${e.fr} — ${why.join('; ')}`); continue; }
+  const wi = wordIndex.get(e.word) ?? wordIndex.get(e.word.replace(/œ/g, 'oe'));
+  // (a head word outside the 7,000 is fine: the expression is taught on its own, from the third stage)
+  const ex = exampleFor(e, EXPR_SRC);
+  exprDeck.push({ id: e.id, fr: e.fr, en: e.en, literal: e.literal, i: wi ?? undefined, reg: e.reg || undefined, note: e.note, ex: ex ? { t: ex.t, e: ex.e } : undefined });
+}
+for (const [n, e] of exprDeck.entries()) {
+  // three other meanings that share no content word with this one, to choose among
+  const mine = kw(e.en);
+  const pool = shuffled(exprDeck.filter((o) => o !== e && !overlap(mine, kw(o.en)) && o.en !== e.en), seeded('ex' + e.id));
+  const options = [];
+  for (const o of pool) { if (!options.some((x) => overlap(kw(x), kw(o.en)))) options.push(o.en); if (options.length === 3) break; }
+  if (options.length < 3) continue;
+  items.push({ id: `ex/${e.id}`, k: 'idiom-mean', x: n, options, level: 4, stageHint: e.i == null ? 2 : Math.max(1, stageOfRank(WORDS[e.i].r)) });
+}
+
 const conjTenses = Object.fromEntries(Object.entries(TENSE_LABEL).map(([k, [fr, en]]) => [k, { fr, en }]));
-const conjLadder = LADDER.map((rg, n) => ({ id: rg.id, title: rg.title, en: rg.en, why: rg.why, tenses: rg.tenses, stage: rg.stage, n: drillItems.filter((x) => x.rung === n).length }));
+const conjLadder = LADDER.map((rg, n) => ({ id: rg.id, title: rg.title, en: rg.en, why: rg.why, tenses: rg.tenses, stage: rg.stage, n: drillItems.filter((x) => x.rung === n).length,
+  builds: BUILDS[rg.id].from.map((f) => LADDER.findIndex((x) => x.id === f)), uses: BUILDS[rg.id].uses,
+  teach: { ...LESSONS[rg.id], model: LESSONS[rg.id].model ? idxOf(LESSONS[rg.id].model) : null, words: (LESSONS[rg.id].words || []).map(idxOf) } }));
+for (const r of conjLadder) { if (r.teach.model === undefined || r.teach.words.some((x) => x == null)) throw new Error('a lesson names a verb that is not in the deck: ' + r.id); }
 
 // ── 14. the stages, and where each question sits ─────────────────────────
 const stages = SYLLABUS.map((st) => ({
@@ -966,7 +1004,7 @@ const conj = {};
 for (const [i, w] of WORDS.entries()) if (w.conj && w.k === 'v') conj[i] = w.conj;
 const deck = {
   built: new Date().toISOString().slice(0, 10),
-  stages, words: wire, conj, conjLadder, conjTenses, endings: endingStats,
+  stages, words: wire, conj, conjLadder, conjTenses, expressions: exprDeck, endings: endingStats,
   examples, grammar, notes, cues,
   canadian: canDeck.filter((c) => c.ok).map((c) => ({ ...c, ok: undefined, audio: c.audio ? { by: c.audio.by, place: c.audio.place, f: c.audio.f, p: pathOf(c.audio.mp3) } : undefined })),
   homophones: Object.fromEntries(Object.entries(HOMO).map(([k, v]) => [k, { point: v.point, tip: v.tip, words: v.words }])),

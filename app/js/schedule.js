@@ -30,7 +30,7 @@ export const DAY = 864e5;
 // a session, and it made the pack feel small. A miss now simply comes back on
 // a later day — the spacing that actually builds memory.
 const NEW_PER_ROUND = 13;
-const MIN_NEW = 9;                   // new questions per round while some reviews are due
+const MIN_NEW = 6;                   // new questions per round while some reviews are due
 const ROUND = 25;              // about five minutes at ten seconds a question
 // Palimpsest's pack was 317 questions and these numbers suited it. This deck
 // is 13,826 questions towards a 6,000-word vocabulary, and a backlog threshold
@@ -82,7 +82,7 @@ const tomorrow = () => { const d = new Date(now()); return new Date(d.getFullYea
 function blank() {
   return {
     v: 1, cards: {}, days: {},
-    settings: { sound: true, theme: 'fleurdelise', scheme: 'auto', voice: 'qc', lang: 'fade', pace: 'steady', sitting: 'long' },
+    settings: { sound: true, theme: 'fleurdelise', scheme: 'auto', voice: 'qc', lang: 'fade', pace: 'steady', sitting: 'standard' },
     placement: null,
   };
 }
@@ -134,6 +134,7 @@ export const State = {
     // The daily log, by kind of answer, so accuracy can be read against the
     // 80–85% target: first-try reviews only, not new cards or in-round repeats.
     day.n++; if (right) day.right++;
+    if (id.startsWith('cd/')) { day.cn = (day.cn || 0) + 1; if (right) day.cr = (day.cr || 0) + 1; }   // conjugation, for the weekly trend
     if (wasReview && !repeat) { day.rn = (day.rn || 0) + 1; if (right) day.rr = (day.rr || 0) + 1; }
     // Conjugation drills have a daily allowance of their own (newC): they are a separate
     // sitting with their own pace, so they neither spend nor wait on the words' allowance.

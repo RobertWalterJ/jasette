@@ -48,9 +48,10 @@ let seed = 42;
 const rand = () => ((seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648);
 const fails = [];
 
-function simulate({ label, floor, days, conj = false }) {
+// rounds: how many 18-question rounds a day the learner does (a burst day, a middle day, an ordinary day)
+function simulate({ label, floor, days, conj = false, rounds: perDay = [10, 4, 7], casual = false }) {
   store.clear();
-  S.State.data = { v: 1, cards: {}, days: {}, settings: { sound: true, theme: 'fleurdelise', scheme: 'auto', voice: 'qc', lang: 'both', pace: 'steady', sitting: 'long' }, placement: null };
+  S.State.data = { v: 1, cards: {}, days: {}, settings: { sound: true, theme: 'fleurdelise', scheme: 'auto', voice: 'qc', lang: 'both', pace: 'steady', sitting: 'standard' }, placement: null };
   if (floor) { S.State.data.placement = { at: 0, floor, size: 3000, asked: 30, proportions: [1, 1, 1, 1, 0.9, 0.8, 0.6, 0.35, 0.2, 0.1, 0, 0] }; S.State.data.maxStage = floor; }
   let t = new Date(2026, 8, 1, 8, 30).getTime();
   S.__setClock(() => t);
@@ -60,7 +61,7 @@ function simulate({ label, floor, days, conj = false }) {
   let conjRounds = 0, conjNew = 0, conjQs = 0, worstConjDue = 0;
   const failsHere = [];
   for (let day = 0; day < days; day++) {
-    const sittings = day % 7 === 3 ? 6 : day % 3 === 0 ? 2 : 4;   // he plays in bursts, several times a day
+    const sittings = day % 7 === 3 ? perDay[0] : day % 3 === 0 ? perDay[1] : perDay[2];   // he plays in bursts, several times a day
     const asked = new Set();
     let newToday = 0;
     for (let s = 0; s < sittings; s++) {
@@ -135,8 +136,14 @@ function simulate({ label, floor, days, conj = false }) {
   // review pile that follows is the price, so the throttle then holds the average lower rather
   // than let the pile grow without limit.
   const first = newByDay.slice(0, 14).reduce((a, b) => a + b, 0) / 14;
-  if (floor && first < 30) failsHere.push(`only ${first.toFixed(1)} new questions a day in the first fortnight (the aim is 30 or more)`);
-  if (totalNew / days < (conj ? 13 : floor ? 18 : 10)) failsHere.push(`only ${(totalNew / days).toFixed(1)} new questions a day on average`);
+  if (casual) {
+    // one to three short rounds a day: the pace is the learner's own, 15 to 20 new a day, never forced
+    if (first < 12 || first > 30) failsHere.push(`a casual learner got ${first.toFixed(1)} new questions a day in the first fortnight (expected about 15 to 20)`);
+    if (totalNew / days < 8) failsHere.push(`a casual learner got only ${(totalNew / days).toFixed(1)} new questions a day on average`);
+  } else {
+    if (floor && first < 30) failsHere.push(`only ${first.toFixed(1)} new questions a day in the first fortnight (the aim is 30 or more, up to the 40 a day on offer)`);
+    if (totalNew / days < (conj ? 13 : floor ? 18 : 10)) failsHere.push(`only ${(totalNew / days).toFixed(1)} new questions a day on average`);
+  }
   if (worstBacklog > 1300) failsHere.push(`the due pile reached ${worstBacklog} — reviews are being buried`);
   if (short > rounds * 0.25) failsHere.push(`${short} of ${rounds} rounds came up short of the sitting length`);
   if (skills.size < 5) failsHere.push(`only ${skills.size} of the six skills were ever started: ${[...skills].join(', ')}`);
@@ -161,6 +168,7 @@ function simulate({ label, floor, days, conj = false }) {
 
 if(!process.env.CONJ_ONLY) simulate({ label: 'from the start', floor: 0, days: 180 });
 if(!process.env.CONJ_ONLY) simulate({ label: 'placed at stage 4', floor: 3, days: 180 });
+if(!process.env.CONJ_ONLY) simulate({ label: 'placed at stage 4, a casual learner (1 to 3 rounds a day)', floor: 3, days: 180, rounds: [3, 1, 2], casual: true });
 simulate({ label: 'placed at stage 4, with a daily conjugation sitting', floor: 3, days: 180, conj: true });
 
 if (fails.length) {
