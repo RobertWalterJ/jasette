@@ -16,8 +16,8 @@
 // clearing them with the page would mean re-downloading the lot over mobile
 // data every time a typo is fixed.
 
-const VERSION = "jasette-v-1.0.0-bb14692437";          // stamped per deploy by make-deploy.mjs
-const SHELL = ['./', 'index.html', 'icons/icon-192.png', 'icons/icon-512.png', "app.1139f58e32.js", "style.58a9011d72.css", "data/deck.f530bdd8f2.json", "data/audio.cddf6f034a.json", 'fonts/fonts.css', 'fonts/atkinson-hyperlegible-latin-400.woff2', 'fonts/atkinson-hyperlegible-latin-700.woff2', 'fonts/fraunces-latin.woff2'];   // make-deploy.mjs appends the hashed files
+const VERSION = "jasette-v-1.0.0-9238d61398";          // stamped per deploy by make-deploy.mjs
+const SHELL = ['./', 'index.html', 'icons/icon-192.png', 'icons/icon-512.png', "app.2afa73f3c3.js", "style.58a9011d72.css", "data/deck.f530bdd8f2.json", "data/audio.1ba9621c41.json", 'fonts/fonts.css', 'fonts/atkinson-hyperlegible-latin-400.woff2', 'fonts/atkinson-hyperlegible-latin-700.woff2', 'fonts/fraunces-latin.woff2'];   // make-deploy.mjs appends the hashed files
 const AUDIO_CACHE = 'jasette-audio-v1';
 const OURS = /^jasette-v-/;
 

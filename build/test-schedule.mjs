@@ -125,8 +125,8 @@ function simulate({ label, floor, days }) {
   for (const f of failsHere) fails.push(`${label}: ${f}`);
 }
 
-simulate({ label: 'from the start', floor: 0, days: 90 });
-simulate({ label: 'placed at stage 4', floor: 3, days: 90 });
+simulate({ label: 'from the start', floor: 0, days: 180 });
+simulate({ label: 'placed at stage 4', floor: 3, days: 180 });
 
 if (fails.length) {
   console.error('\ntest-schedule FAILED:');

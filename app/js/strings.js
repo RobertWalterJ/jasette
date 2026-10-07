@@ -84,6 +84,8 @@ const STR = {
   about: ['Sources et licences', 'Sources and licences'],
   soundsVoices: ['Voix et sons', 'Voices and sounds'], rhythm: ['Rythme', 'Pace'], yourProgress: ['Ta progression', 'Your progress'], vocabulary: ['Vocabulaire', 'Vocabulary'], skills: ['Compétences', 'Skills'],
   whyThese: ['Pourquoi ces mots, maintenant ?', 'Why these words now?'], moreWords: ['Plus de mots', 'More words'], nothingFound: ['Aucun mot trouvé.', 'No word found.'], result: ['Résultat', 'Result'], whereAreYou: ['Où en es-tu ?', 'Where are you?'],
+  install: ['Installer sur l’écran d’accueil', 'Install on your home screen'], installNote: ['Une icône, plein écran, et ça marche sans réseau.', 'An icon, full screen, and it works offline.'],
+  installed: ['Installée', 'Installed'], installSteps: ['Comment l’installer', 'How to install it'], installNow: ['Installer maintenant', 'Install now'], later: ['Plus tard', 'Not now'],
   fade: ['L’anglais s’efface', 'English fades as you learn'], fadeNote: ['Chaque phrase garde son anglais jusqu’à ce que tu l’aies vue plusieurs jours.', 'Each phrase keeps its English until you have seen it on several days.'],
   showEnglish: ['Remettre tout l’anglais', 'Bring all the English back'], englishBack: ['L’anglais est de retour.', 'The English is back.'],
 };

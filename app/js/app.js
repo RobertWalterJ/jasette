@@ -51,6 +51,51 @@ function applyLook() {
 }
 mq?.addEventListener?.('change', () => { applyLook(); });
 
+// ── installing it ────────────────────────────────────────────────────────
+// Chrome offers an install prompt only when it decides to, and its own menu can refuse
+// ("already installed" with nothing installed — Night Sky's bug, Oct 2026). The way round
+// it that worked is an in-page button that holds on to the `beforeinstallprompt` event and
+// calls prompt() itself. Where there is no such event (iPhone, a browser that has already
+// shown it, or Chrome's menu path) the same button opens the steps by hand.
+let installEvent = null;
+const standalone = () => (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvent = e; if (currentScreen() === 'today') repaint(); });
+window.addEventListener('appinstalled', () => { installEvent = null; State.data.installed = true; State.save(); repaint(); });
+async function installApp() {
+  if (installEvent) {
+    installEvent.prompt();
+    try { const r = await installEvent.userChoice; if (r.outcome === 'accepted') { State.data.installed = true; State.save(); } } catch { /* the sheet closes either way */ }
+    installEvent = null; repaint();
+    return;
+  }
+  installSheet();
+}
+function installSheet() {
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+  const step = (n, text) => h('div', { style: 'display:flex;gap:12px;align-items:flex-start;margin:10px 0' }, h('span', { class: 'chip accent', style: 'flex:none;min-width:30px;justify-content:center' }, String(n)), h('span', {}, text));
+  sheet(
+    h('h2', {}, lab('installSteps')),
+    h('p', { class: 'note' }, 'Jasette est une application web : une fois installée, elle a son icône, s’ouvre en plein écran et garde ta progression sur ce téléphone.'),
+    ios ? [
+      step(1, 'Ouvre cette page dans Safari.'),
+      step(2, 'Touche le bouton Partager (le carré avec une flèche vers le haut).'),
+      step(3, 'Choisis « Sur l’écran d’accueil », puis « Ajouter ».'),
+    ] : [
+      step(1, 'Ouvre cette page dans Chrome.'),
+      step(2, 'Touche le menu ⋮ en haut à droite.'),
+      step(3, 'Choisis « Installer l’application » (ou « Ajouter à l’écran d’accueil »), puis confirme.'),
+    ],
+    h('div', { class: 'gpoint' }, h('p', { class: 'watch' }, 'Si le menu dit « déjà installée » sans qu’il y ait d’icône : touche d’abord le bouton « Installer maintenant » de cette page quand il apparaît, ou désinstalle l’ancienne icône de Jasette, puis recommence. Ta progression reste dans le navigateur ; sauvegarde-la d’abord dans les réglages.')),
+    h('button', { class: 'btn primary wide', type: 'button', onclick: closeSheet }, t('gotIt')));
+}
+const installCard = () => (standalone() || State.data.installed ? null : h('section', { class: 'card flat' },
+  h('div', { style: 'display:flex;gap:14px;align-items:center' },
+    h('span', { html: ICON.download, style: 'display:inline-flex;width:28px;color:var(--accent);flex:none' }),
+    h('div', { style: 'flex:1;min-width:0' }, h('div', { style: 'font-weight:700' }, lab('install')), h('div', { class: 'note', style: 'margin:0' }, t('installNote')))),
+  h('div', { style: 'display:grid;gap:8px;margin-top:12px' },
+    installEvent ? h('button', { class: 'btn primary wide', type: 'button', onclick: installApp }, lab('installNow')) : null,
+    h('button', { class: 'btn ghost wide', type: 'button', onclick: installSheet }, lab('installSteps')))));
+
 // ── backup ───────────────────────────────────────────────────────────────
 function backupProgress() {
   const blob = new Blob([JSON.stringify({ app: 'jasette', version: VERSION.v, saved: new Date().toISOString(), data: State.data }, null, 1)], { type: 'application/json' });
@@ -171,6 +216,7 @@ function homeScreen() {
           h('button', { class: 'mini', type: 'button', onclick: () => show('placement') }, h('span', { html: ICON.sparkle }), t('findLevel'), h('small', {}, State.data.placement ? `≈ ${State.data.placement.size.toLocaleString('fr-CA')} mots au dernier test` : t('findLevelNote')))) : null,
         outLoudSwitch(),
         run > 1 ? h('p', { class: 'note', style: 'margin:12px 0 0' }, h('span', { html: ICON.flame, style: 'display:inline-flex;width:16px;vertical-align:-3px;color:var(--accent2)' }), ` ${run} ${t('daysRun')}`) : null),
+      installCard(),
       !frAvailable() ? h('section', { class: 'card flat' }, h('p', { class: 'note' }, 'Ce téléphone n’a pas de voix française. Les mots et phrases enregistrés se jouent quand même ; les autres questions d’écoute sont mises de côté.')) : null,
       word ? h('section', { class: 'card' },
         h('p', { class: 'eyebrow' }, t('wordOfDay')),
@@ -420,6 +466,7 @@ function settingsScreen() {
       h('h2', { style: 'font-size:1.2rem;margin-bottom:8px' }, lab('offline')),
       h('p', { class: 'note' }, `${bundledCount().toLocaleString('fr-CA')} enregistrements sont fournis avec l’app. Ils se gardent d’eux-mêmes quand tu les écoutes ; ce bouton les prend tous d’un coup, pour travailler sans réseau.`),
       h('button', { class: 'btn wide', type: 'button', style: 'margin-top:8px', onclick: (e) => downloadAll(e.currentTarget) }, h('span', { html: ICON.download }), t('downloadAudio')), dl),
+    standalone() || State.data.installed ? h('p', { class: 'note centre' }, '✓ ', t('installed')) : h('button', { class: 'btn wide', type: 'button', style: 'margin-bottom:10px', onclick: installApp }, h('span', { html: ICON.download }), t('install')),
     h('button', { class: 'btn ghost wide', type: 'button', onclick: () => show('about') }, t('about')),
     h('p', { class: 'note centre', style: 'margin-top:16px' }, `Version ${VERSION.v}${VERSION.date ? ` · ${VERSION.date}` : ''}${VERSION.commit ? ` · ${VERSION.commit}` : ''}. Rien n’est envoyé nulle part, pas même ce que dit le microphone.`))];
 }
