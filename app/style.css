@@ -469,3 +469,10 @@ details.more { margin: var(--s3) 0; } details.more summary { cursor: pointer; fo
 @media (min-width: 700px) { body { padding-bottom: 0; } .tabbar { position: sticky; top: 0; bottom: auto; border-top: 0; border-bottom: 1px solid var(--line); height: var(--bar-h); } .tab::before { top: auto !important; bottom: 0; border-radius: 4px 4px 0 0 !important; } .sheet { border-radius: 28px; bottom: 24px; } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; } }
 @media (max-width: 360px) { .choices.pair, .split { grid-template-columns: 1fr; } .bigword { font-size: 2rem; } }
+
+/* speaking: what the phone heard, and which words it did not */
+.live { min-height: 1.4em; margin: var(--s2) 0; color: var(--muted); }
+.said { font-size: 1.15rem; line-height: 1.7; }
+.said .miss { text-decoration: underline wavy; text-underline-offset: 4px; font-weight: 700; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.sentence-fill.lines { white-space: pre-line; line-height: 2.3; }

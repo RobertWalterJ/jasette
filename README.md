@@ -55,6 +55,21 @@ by finding where you stand and then spends its teaching on what is new.
   (`build/lib/expressions.mjs`, checked again by verify), an origin is claimed only if the head
   word's Wiktionary etymology says it, and where nobody knows why (as with *bol* and *pot*)
   the card says so.
+- **Speaking, with the phone listening.** Say a word; *Écoute et répète* (a real recording, then you);
+  *Dis-le en français* (the English, then you say the sentence). With the learner's say-so (asked once,
+  in plain words, because browser speech recognition sends the voice to the browser maker) the app shows
+  what it hears live, scores the sentence word by word against the target (`app/js/asr.js`, tested in
+  `build/test-asr.mjs`), and underlines the words it missed. Only a ≥90% match is marked right on the
+  phone's say-so; anything less is the learner's call, because a recogniser built for native speakers
+  misses learners. Without recognition it is a flashcard the learner marks, said plainly.
+- **Parler.** A speaking-only session (Today → Parler): another voice says the sentence, and the
+  moment the recording ends the phone starts listening and marks the words, hands-free.
+- **Whole tenses and whole persons.** Every conjugation round slips in one or two table questions:
+  *Toute la conjugaison* (one tense across je … ils) and *À travers les temps* (one person across
+  present, passé composé, imparfait, futur, conditionnel, subjonctif), each filled by tapping forms into
+  lines; verify re-derives every form independently.
+- **Read aloud, and the right answer when you're wrong.** With read-aloud on, a wrong answer is
+  followed by the correct answer in French (and nothing else unless “read the answer too” is on).
 - **Short rounds.** 18 questions a round; up to 40 new a day on offer across several rounds,
   or a slower 15–20 a day if you do one. Nothing is forced.
 - **Read aloud, three ways**: a speaker beside every choice, an *À voix haute* button on every

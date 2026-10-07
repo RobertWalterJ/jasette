@@ -10,10 +10,10 @@ import { D, wordOf, examplesOf, SELF_RATED } from './deck.js';
 import { t, sub } from './strings.js';
 import { unlock } from './speech.js';
 import { playWord, playSentence, playCanadian, stopAudio, wordClip } from './audio.js';
-import { asrSupported, listenFor, matches } from './asr.js';
+import { asrSupported, listenFor, matches, similar, verdict } from './asr.js';
 import { hintFor, tipNode } from './help.js';
-import { autoRead, readQuestionButton } from './read.js';
-import { conjFacts, conjAfter } from './conj.js';
+import { autoRead, readQuestionButton, cancelReading, onAutoplayEnd } from './read.js';
+import { conjFacts, conjAfter, paradigmAfter, paradigmText, PERSON } from './conj.js';
 import { S, voicePref, wordNode, plainWord, articleFor, playBtn, wordVoices, sentenceBtn, sentenceBlock, wordCard, voiceNote, readBtn, lab, fillSentence, segmentsAround, choices, afterCard, ipaLine, creditLine, qcIcon, exprCard } from './parts.js';
 
 const prompt = (key, extra = null) => h('p', { class: 'prompt' }, lab(key), extra);
@@ -35,9 +35,12 @@ function renderKind(it, ctx) {
     case 'word-listen': return wordListen(it, ctx);
     case 'word-pick': return wordPick(it, ctx);
     case 'word-say': return wordSay(it, ctx);
+    case 'sentence-repeat': return sentenceRepeat(it, ctx);
+    case 'sentence-say': return sentenceSay(it, ctx);
     case 'word-cloze': return gapSingle(it, ctx, { key: 'pGap' });
     case 'conj-pick': return gapSingle(it, ctx, { key: 'pForm', cue: conjCue });
     case 'conj-drill': return conjDrill(it, ctx);
+    case 'conj-row': case 'conj-across': return conjParadigm(it, ctx);
     case 'idiom-mean': return idiomMean(it, ctx);
     case 'aux-pick': return gapSingle(it, ctx, { key: 'pAux', cue: (q) => `${t('pAux')} ${q.participle}` });
     case 'agree-pick': return gapSingle(it, ctx, { key: 'pAgree' });
@@ -84,7 +87,7 @@ function wordRead(it, ctx) {
     cueOf(it.i) ? h('p', { class: 'cue' }, cueOf(it.i)) : null);
   c.append(choices(it.options, w.g, (ok) => {
     done(ctx, ok);
-    c.append(afterCard([wordCard(it.i)], { ...ctx, ok, answer: w.g }));
+    c.append(afterCard([wordCard(it.i)], { ...ctx, ok, answer: w.g, say: w.d || w.w }));
   }));
   return c;
 }
@@ -97,7 +100,7 @@ function wordListen(it, ctx) {
     h('div', { class: 'voices' }, playBtn({ label: t('listen'), big: true, autoplay: true, note, play: (end) => playWord(w, it.i, { pref: voicePref(), onend: end }) })), note);
   c.append(choices(it.options, w.g, (ok) => {
     done(ctx, ok);
-    c.append(afterCard([wordCard(it.i)], { ...ctx, ok, answer: w.g }));
+    c.append(afterCard([wordCard(it.i)], { ...ctx, ok, answer: w.g, say: w.d || w.w }));
   }));
   return c;
 }
@@ -121,35 +124,115 @@ function wordPick(it, ctx) {
 // not the same kind of evidence, and the app says so and records it separately.
 function wordSay(it, ctx) {
   const w = wordOf(it);
-  const checked = asrSupported() && S().asr === true;
   const c = card('speaking', prompt('pSay'), h('p', { class: 'gloss big' }, w.g), cueOf(it.i) ? h('p', { class: 'cue' }, cueOf(it.i)) : null);
+  c.append(speakFlow(ctx, { target: w.w, word: true, reveal: (extra) => [wordCard(it.i), extra] }));
+  return c;
+}
+
+// ── every "say it" question: one flow ────────────────────────────────────
+// The phone listens if the learner has let it (asked once, in plain words, the first time), shows
+// what it hears as it hears it, and marks the answer. A clear match is right; anything less is shown
+// word by word and handed back to the learner, because a recogniser built for native speakers
+// misses learners often. Without recognition it is a flashcard the learner marks, said plainly.
+function speakFlow(ctx, { target, word = false, reveal, rateLabels = null }) {
+  const wrap = h('div', {});
   const out = h('div', {});
+  const lang = () => (voicePref() === 'fr' ? 'fr-FR' : 'fr-CA');
+  const labels = rateLabels || [t('iKnewIt'), t('notYet')];
   const selfRate = (lead) => h('div', {},
     lead ? h('p', { class: 'note' }, lead) : null,
     h('div', { class: 'choices two' },
-      h('button', { class: 'choice big-c', type: 'button', onclick: () => { done(ctx, true, { selfRated: true }); out.append(afterCard([], ctx)); } }, t('iKnewIt')),
-      h('button', { class: 'choice big-c', type: 'button', onclick: () => { done(ctx, false, { selfRated: true }); out.append(afterCard([], ctx)); } }, t('notYet'))));
-  const reveal = (extra) => { out.append(wordCard(it.i)); if (extra) out.append(extra); };
-  if (!checked) {
-    const btn = h('button', { class: 'btn primary wide', type: 'button', onclick: () => {
-      btn.remove(); reveal();
-      out.append(selfRate('Toi seul peux entendre si ça y était : c’est donc toi qui notes. La vérification par le téléphone est dans les réglages.'));
-    } }, t('showMe'));
-    c.append(btn, out);
-    return c;
-  }
-  const listen = h('button', { class: 'btn primary wide', type: 'button', onclick: async () => {
-    listen.disabled = true; listen.textContent = '…';
-    const res = await listenFor({ lang: voicePref() === 'fr' ? 'fr-FR' : 'fr-CA' });
-    listen.remove(); skip.remove();
-    if (!res.ok) { reveal(h('p', { class: 'warn' }, res.why)); out.append(selfRate('À toi de noter, cette fois.')); return; }
-    const m = matches(w.w, res.heard);
-    reveal(h('div', {}, h('p', { class: m.hit ? 'good' : 'warn' }, m.hit ? `J’ai entendu « ${m.on} » — ça y est.` : `J’ai entendu « ${res.heard[0]} » — je n’ai pas trouvé ${w.w}.`),
-      h('p', { class: 'note' }, 'Le logiciel est fait pour des phrases de locuteurs natifs : un échec ne prouve pas que tu l’as mal dit, alors c’est toi qui décides.')));
-    if (m.hit) { done(ctx, true); out.append(afterCard([], ctx)); } else out.append(selfRate(null));
-  } }, [h('span', { html: ICON.mic, style: 'display:inline-flex;width:20px' }), t('sayIt')]);
-  const skip = h('button', { class: 'link', type: 'button', onclick: () => { listen.remove(); skip.remove(); reveal(); out.append(selfRate(null)); } }, t('showMe'));
-  c.append(listen, skip, out);
+      h('button', { class: 'choice big-c', type: 'button', onclick: () => { done(ctx, true, { selfRated: true }); out.append(afterCard([], ctx)); } }, labels[0]),
+      h('button', { class: 'choice big-c', type: 'button', onclick: () => { done(ctx, false, { selfRated: true }); out.append(afterCard([], { ...ctx, wrong: true, say: target })); } }, labels[1])));
+  const showAnswer = (extra) => out.append(...[].concat(reveal(extra)).filter(Boolean));
+  // the sentence, with the words the phone did not hear marked (underline, and said to a screen reader)
+  const marked = (pieces) => h('p', { class: 'said' }, ...pieces.flatMap((x, k) => [k ? ' ' : '',
+    x.hit ? h('span', { class: 'heard' }, typo(x.show)) : h('span', { class: 'miss' }, typo(x.show), h('span', { class: 'sr-only' }, ' (not heard)'))]));
+
+  const build = () => {
+    wrap.replaceChildren();
+    const noAsr = asrSupported() ? null : 'This browser cannot listen, so you will mark yourself.';
+    const asked = S().asr !== undefined;
+    // the first time: say what listening costs, and ask
+    if (asrSupported() && !asked) {
+      wrap.append(h('div', { class: 'gpoint' },
+        h('h3', {}, 'Let the phone listen?'),
+        h('p', {}, 'To check what you say, your phone sends a short recording of your voice to the browser’s maker (Google, if you use Chrome) to turn it into text. Jasette does not keep it. You can turn this off any time in Réglages.'),
+        h('p', { class: 'note' }, 'It is built for native speakers, so it will sometimes mishear you. When it is not sure, you decide.'),
+        h('div', { class: 'choices two' },
+          h('button', { class: 'choice big-c', type: 'button', onclick: () => { S().asr = true; State.save(); build(); } }, 'Yes, listen to me'),
+          h('button', { class: 'choice big-c', type: 'button', onclick: () => { S().asr = false; State.save(); build(); } }, 'No, I’ll mark myself'))));
+      return;
+    }
+    if (asrSupported() && S().asr === true) {
+      const live = h('p', { class: 'live', 'aria-live': 'polite' });
+      const say = h('button', { class: 'btn primary wide', type: 'button' }, h('span', { html: ICON.mic, style: 'display:inline-flex;width:20px' }), t('sayIt'));
+      const skip = h('button', { class: 'link', type: 'button', onclick: () => { say.remove(); skip.remove(); live.remove(); showAnswer(); out.append(selfRate(null)); } }, t('showMe'));
+      say.onclick = async () => {
+        unlock(); cancelReading(); stopAudio();
+        say.disabled = true; skip.remove();
+        live.textContent = 'Listening… say it, then tap Done (or just stop talking).';
+        const stop = h('button', { class: 'btn ghost wide', type: 'button' }, 'Done');
+        say.replaceWith(stop);
+        const job = listenFor({ lang: lang(), onInterim: (txt) => { if (txt) live.textContent = '« ' + txt + ' »'; } });
+        stop.onclick = () => { stop.disabled = true; job.stop(); };
+        const res = await job;
+        stop.remove(); live.remove();
+        if (!res.ok) { showAnswer(h('p', { class: 'warn' }, res.why)); out.append(selfRate('À toi de noter, cette fois.')); return; }
+        if (word) {
+          const m = matches(target, res.heard);
+          showAnswer(h('div', {}, h('p', { class: m.hit ? 'good' : 'warn' }, m.hit ? `J’ai entendu « ${m.on} » : ça y est.` : `J’ai entendu « ${res.heard[0]} » : je n’ai pas trouvé ${target}.`),
+            m.hit ? null : h('p', { class: 'note' }, 'The phone is built for native speakers, so a miss does not prove you said it wrongly. You decide.')));
+          if (m.hit) { done(ctx, true); out.append(afterCard([], ctx)); } else out.append(selfRate(null));
+          return;
+        }
+        const r = similar(target, res.heard);
+        const v = verdict(r.score);
+        const pct = Math.round(r.score * 100);
+        showAnswer(h('div', {},
+          h('p', { class: 'note' }, 'I heard: « ', h('b', {}, r.on), ' »'),
+          marked(r.pieces),
+          h('p', { class: v === 'hit' ? 'good' : 'warn' }, v === 'hit' ? `${pct}% of the words: that’s it.` : v === 'close' ? `${pct}%: nearly. The underlined words are the ones I did not catch.` : `${pct}%: I only caught part of it.`),
+          v === 'hit' ? null : h('p', { class: 'note' }, 'A recogniser built for native speakers misses learners often, so you decide: did you say it?')));
+        if (v === 'hit') { done(ctx, true); out.append(afterCard([], ctx)); } else out.append(selfRate(null));
+      };
+      wrap.append(say, live, skip);
+    } else {
+      const btn = h('button', { class: 'btn primary wide', type: 'button', onclick: () => {
+        btn.remove(); showAnswer();
+        out.append(selfRate(noAsr || 'Only you can hear whether it was right, so you mark it. Letting the phone listen is in Réglages.'));
+      } }, t('showMe'));
+      wrap.append(btn);
+    }
+  };
+  build();
+  wrap.append(out);
+  // speaking mode: open the microphone for the learner (only if they have let the phone listen)
+  wrap.autoStart = () => { if (asrSupported() && S().asr === true) wrap.querySelector('.btn.primary')?.click(); };
+  return wrap;
+}
+
+// ── listen and repeat: a real recording, then you say it ─────────────────
+function sentenceRepeat(it, ctx) {
+  const note = h('p', { class: 'note centre' });
+  const words = h('div', { hidden: true }, h('p', { class: 'fr-s' }, typo(it.text)), h('p', { class: 'en-s' }, it.eng));
+  const toggle = h('button', { class: 'link', type: 'button', onclick: () => { words.hidden = !words.hidden; toggle.textContent = words.hidden ? 'Show the words' : 'Hide the words'; } }, 'Show the words');
+  const c = card('speaking', prompt('pRepeat'),
+    h('div', { class: 'voices' }, sentenceBtn({ id: it.sid, t: it.text, a: 1, by: it.by }, { label: t('listen'), big: true, autoplay: true, note })), note,
+    toggle, words);
+  const flow = speakFlow(ctx, { target: it.text, rateLabels: ['Je l’ai dit', t('notYet')], reveal: (extra) => [sentenceBlock({ text: it.text, eng: it.eng, sid: it.sid, hasAudio: true, by: it.by }), extra] });
+  c.append(flow);
+  // speaking mode: another voice says it, and as soon as the recording ends the phone starts listening
+  if (ctx.speak) onAutoplayEnd(() => flow.autoStart());
+  return c;
+}
+
+// ── say it in French: the English, and you produce the sentence ──────────
+function sentenceSay(it, ctx) {
+  const c = card('speaking', prompt('pSaySentence'), h('p', { class: 'gloss big' }, it.eng));
+  const flow = speakFlow(ctx, { target: it.text, rateLabels: ['Je l’ai dit', t('notYet')], reveal: (extra) => [sentenceBlock({ text: it.text, eng: it.eng, sid: it.sid, hasAudio: !!it.audio }), extra] });
+  c.append(flow);
+  if (ctx.speak) setTimeout(() => flow.autoStart(), 800);        // the English is on screen: listen after a moment
   return c;
 }
 
@@ -189,7 +272,29 @@ function idiomMean(it, ctx) {
     x.reg === 'fam' ? h('p', { class: 'cue' }, 'familier') : null);
   c.append(choices(it.options, x.en, (ok) => {
     done(ctx, ok);
-    c.append(afterCard([exprCard(x, { head: false })], { ...ctx, ok, answer: x.en }));
+    c.append(afterCard([exprCard(x, { head: false })], { ...ctx, ok, answer: x.en, say: x.fr }));
+  }));
+  return c;
+}
+
+// ── 5a-2. a whole tense across the persons, or one person across the tenses ──
+// Conjugation as a shape. Tap each form into its line (the fill-multi mechanism, one blank per line).
+function conjParadigm(it, ctx) {
+  const d = D();
+  const w = d.words[it.v];
+  const row = it.k === 'conj-row';
+  const tn = row ? d.conjTenses[it.tense] : null;
+  const c = card('grammar', prompt(row ? 'pRow' : 'pAcross'),
+    h('p', { class: 'bigword' }, typo(w.d || w.w)),
+    h('p', { class: 'gloss' }, w.g),
+    h('p', { class: 'cue' }, row ? tn.fr : PERSON[it.slot] + ' · ' + it.tenses.map((x) => d.conjTenses[x].fr).join(' · ')));
+  c.append(fillSentence({
+    segs: it.segs, answers: it.answers, bank: it.bank, lines: true,
+    hint: h('p', { class: 'note translation' }, row ? tn.en + ': every person' : 'one person, ' + it.tenses.length + ' tenses'),
+    onChecked: (ok) => {
+      done(ctx, ok);
+      c.append(afterCard([paradigmAfter(it)], { ...ctx, ok, say: paradigmText(it) }));
+    },
   }));
   return c;
 }
@@ -237,7 +342,7 @@ function sentenceListen(it, ctx) {
     h('div', { class: 'voices' }, sentenceBtn({ id: it.sid, t: it.text, a: 1, by: it.by }, { label: t('listen'), big: true, autoplay: true, note })), note);
   c.append(choices(it.options, it.eng, (ok) => {
     done(ctx, ok);
-    c.append(afterCard([sentenceBlock({ text: it.text, eng: it.eng, sid: it.sid, hasAudio: true, by: it.by }, { play: false })], { ...ctx, ok, answer: it.eng }));
+    c.append(afterCard([sentenceBlock({ text: it.text, eng: it.eng, sid: it.sid, hasAudio: true, by: it.by }, { play: false })], { ...ctx, ok, answer: it.eng, say: it.text }));
   }));
   return c;
 }
@@ -381,7 +486,7 @@ function qcMean(it, ctx) {
   const c0 = can(it);
   const c = card('canada', prompt('pQcMean'), h('p', { class: 'bigword' }, typo(c0.qc)));
   if (c0.audio) c.append(h('div', { class: 'voices' }, playBtn({ label: 'Québec', play: (end) => playCanadian(c0, { onend: end }) })));
-  c.append(choices(it.options, c0.means, (ok) => { done(ctx, ok); c.append(afterCard([canNote(c0)], { ...ctx, ok, answer: c0.means })); }));
+  c.append(choices(it.options, c0.means, (ok) => { done(ctx, ok); c.append(afterCard([canNote(c0)], { ...ctx, ok, answer: c0.means, say: c0.qc })); }));
   return c;
 }
 function qcPick(it, ctx) {
@@ -395,7 +500,7 @@ function qcListen(it, ctx) {
   const note = h('p', { class: 'note centre' });
   const c = card('canada', prompt('pHear'),
     h('div', { class: 'voices' }, playBtn({ label: t('listen'), big: true, autoplay: true, note, play: (end) => playCanadian(c0, { onend: end }) })), note);
-  c.append(choices(it.options, c0.means, (ok) => { done(ctx, ok); c.append(afterCard([canNote(c0)], { ...ctx, ok, answer: c0.means })); }));
+  c.append(choices(it.options, c0.means, (ok) => { done(ctx, ok); c.append(afterCard([canNote(c0)], { ...ctx, ok, answer: c0.means, say: c0.qc })); }));
   return c;
 }
 function qcOral(it, ctx) {

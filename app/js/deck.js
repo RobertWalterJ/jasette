@@ -24,10 +24,10 @@ export const itemById = (id) => deck.byId.get(id);
 // one number that hides which is lagging.
 export const SKILL = {
   'word-listen': 'listening', 'sentence-listen': 'listening', 'sound-pair': 'listening', 'qc-listen': 'listening',
-  'word-say': 'speaking', 'word-pick': 'speaking',
-  'word-read': 'reading', 'note-pick': 'reading', 'idiom-mean': 'reading',
+  'word-say': 'speaking', 'word-pick': 'speaking', 'sentence-repeat': 'speaking', 'sentence-say': 'speaking',
+  'word-read': 'reading', 'note-pick': 'reading', 'idiom-mean': 'reading', 'dialogue': 'speaking',
   'spell-pick': 'writing', 'homophone-pick': 'writing',
-  'word-cloze': 'grammar', 'fill-multi': 'grammar', 'gender-pick': 'grammar', 'conj-pick': 'grammar', 'conj-drill': 'grammar', 'aux-pick': 'grammar', 'agree-pick': 'grammar',
+  'word-cloze': 'grammar', 'fill-multi': 'grammar', 'gender-pick': 'grammar', 'conj-pick': 'grammar', 'conj-drill': 'grammar', 'conj-row': 'grammar', 'conj-across': 'grammar', 'aux-pick': 'grammar', 'agree-pick': 'grammar',
   'pronoun-pick': 'grammar', 'grammar-build': 'grammar',
   'qc-mean': 'canada', 'qc-pick': 'canada', 'qc-oral': 'canada',
 };
@@ -35,7 +35,7 @@ export const SKILLS = ['listening', 'speaking', 'reading', 'writing', 'grammar',
 
 // Items whose answer is judged by the learner, not the app: a phone cannot mark
 // "did you say this word" — so it asks, and says so.
-export const SELF_RATED = new Set(['word-say']);
+export const SELF_RATED = new Set(['word-say', 'sentence-repeat', 'sentence-say']);
 
 export function indexDeck() {
   deck.byId = new Map(deck.items.map((it) => [it.id, it]));
@@ -57,6 +57,7 @@ export function indexDeck() {
     if (it.v != null) return 'v' + it.v;                       // a conjugation drill: one per verb per round
     if (it.q != null) return 'q' + it.q;
     if (it.x != null) return 'x' + it.x;                       // an expression
+    if (it.d != null) return 'd' + it.d;                       // a dialogue
     if (it.gid) return 'g' + it.gid + (it.sid ? '/' + it.sid : '');
     if (it.choices) return 's' + it.id;
     return 's' + it.id;
@@ -90,18 +91,21 @@ export function stageState({ canAnswerWord, grammarMet, floor = 0 }) {
 }
 
 // Questions that need a French voice or a recording to be answerable at all.
-const NEEDS_SOUND = new Set(['word-listen', 'sentence-listen', 'sound-pair', 'qc-listen', 'spell-pick']);
+const NEEDS_SOUND = new Set(['word-listen', 'sentence-listen', 'sound-pair', 'qc-listen', 'spell-pick', 'sentence-repeat']);
 // Questions that ask the LEARNER to make a noise. On a bus, in a waiting room,
 // beside someone sleeping, those are impossible — and being asked them anyway is
 // what makes an app something you can only use at home.
-export const SPEAKING_ALOUD = new Set(['word-say']);
+export const SPEAKING_ALOUD = new Set(['word-say', 'sentence-repeat', 'sentence-say']);
 const askable = (it, canSound, noSpeaking) => (canSound || !NEEDS_SOUND.has(it.k)) && !(noSpeaking && SPEAKING_ALOUD.has(it.k));
 
 // Conjugation drills have a sitting of their own (the Conjugaison screen: its own ladder, its
 // own daily allowance). A drill nobody has opened is never offered in the ordinary round, or
 // six thousand of them would drown the words; one already started comes back for review there
 // like anything else.
-export const isDrill = (it) => it.k === 'conj-drill';
+// every kind that belongs to the Conjugaison section: single forms, a whole tense, a person across tenses
+export const DRILL_KINDS = new Set(['conj-drill', 'conj-row', 'conj-across']);
+export const PARADIGM_KINDS = new Set(['conj-row', 'conj-across']);
+export const isDrill = (it) => DRILL_KINDS.has(it.k);
 export function drillIds({ rungOpen, met = () => false }) {
   const ids = [];
   for (const it of deck.items) if (isDrill(it) && (met(it.id) || rungOpen(it.rung))) ids.push(it.id);
@@ -124,7 +128,8 @@ const SUPPLY = 220;
 // Spread over the weeks instead, the same material is a steadier load and a more varied one.
 const GATED = new Set(['word-listen', 'word-pick', 'word-cloze', 'word-say', 'spell-pick', 'gender-pick']);
 export function askableIds({ canSound = true, current = Infinity, floor = 0, met = () => false, wordMet = () => false, unlocked = () => true, noSpeaking = false } = {}) {
-  const ok = (it) => askable(it, canSound, noSpeaking) && (!isDrill(it) || met(it.id)) && (met(it.id) || !(GATED.has(it.k) && it.i != null) || unlocked(it.i) || (it.stage != null && it.stage < floor));
+  // (a dialogue is played on its own screen, never in an ordinary round)
+  const ok = (it) => askable(it, canSound, noSpeaking) && it.k !== 'dialogue' && (!isDrill(it) || met(it.id)) && (met(it.id) || !(GATED.has(it.k) && it.i != null) || unlocked(it.i) || (it.stage != null && it.stage < floor));
   const tail = deck.stages.length;
   const opensAt = (it) => (met(it.id) ? 0 : it.stage != null ? it.stage : tail);
   let horizon = current;

@@ -333,6 +333,45 @@ for (const { s, st } of listenChosen) {
   items.push({ id: `sl/${s.id}`, k: 'sentence-listen', sid: s.id, text: s.t, eng: s.e, by: s.a.by, options, level: 3, stageHint: st });
 }
 
+// ── 3b. speaking: repeat a recorded sentence; say a sentence from its English ──
+// Two ways to SPEAK, both marked by the phone when the learner has let it listen (app/js/asr.js) and
+// by the learner otherwise.
+//   sentence-repeat  hear a real recording, then say it (short ones: easy to hold in the ear)
+//   sentence-say     see the English, say the French from memory (production, the hard direction),
+//                    then hear and read the answer
+const REPEAT_PER_STAGE = 50, SAY_PER_STAGE = 40;
+{
+  const taken = new Set();
+  for (let st = 0; st < SYLLABUS.length; st++) {
+    const here = listenPool.filter((x) => x.st <= st && x.s.n >= 3 && x.s.n <= Math.min(9, 5 + st) && !taken.has(x.s.id));
+    const bySpeaker = new Map();
+    for (const x of here) { if (!bySpeaker.has(x.s.a.by)) bySpeaker.set(x.s.a.by, []); bySpeaker.get(x.s.a.by).push(x); }
+    const lists = [...bySpeaker.values()].map((l) => shuffled(l, seeded('sr' + st)));
+    let made = 0;
+    for (let n = 0; made < REPEAT_PER_STAGE && n < 400; n++) for (const l of lists) if (l[n] && made < REPEAT_PER_STAGE) {
+      const { s } = l[n];
+      taken.add(s.id); made++;
+      audioSent.add(s.id);
+      items.push({ id: `sr/${s.id}`, k: 'sentence-repeat', sid: s.id, text: s.t, eng: s.e, audio: 1, by: s.a.by, level: 3, stageHint: st });
+    }
+  }
+  const saidBefore = new Set();
+  const written = (s) => s.t.split(/\s+/).length;                   // words as written (L'été is one)
+  const pool = SENT.filter((s) => s.reg !== 'fam' && s.u <= 1 && s.n >= 4 && s.n <= 8 && written(s) >= 3 && written(s) <= 9);
+  const byStage = new Map();
+  for (const s of pool) { const st = sentStage(s, 1); if (!byStage.has(st)) byStage.set(st, []); byStage.get(st).push(s); }
+  for (let st = 0; st < SYLLABUS.length; st++) {
+    let made = 0;
+    for (const s of shuffled(byStage.get(st) || [], seeded('ss' + st))) {
+      if (made >= SAY_PER_STAGE) break;
+      if (saidBefore.has(s.t)) continue;
+      saidBefore.add(s.t); made++;
+      if (recorded(s)) audioSent.add(s.id);
+      items.push({ id: `ss/${s.id}`, k: 'sentence-say', sid: s.id, text: s.t, eng: s.e, audio: recorded(s) ? 1 : 0, level: 4, stageHint: st });
+    }
+  }
+}
+
 // ── 4. gender: un or une ─────────────────────────────────────────────────
 // Only for nouns Lexique and Wiktionary agree about.
 const endings = { f: GP.get('gender').endings.f, m: GP.get('gender').endings.m };
@@ -870,6 +909,68 @@ for (const [rungIdx, rg] of LADDER.entries()) {
   }
 }
 items.push(...drillItems);
+
+// ── 13b-2. whole paradigms: a tense across the persons; a person across the tenses ──
+// Two ways to see conjugation as a SHAPE, not a single form; a couple are interspersed in every
+// conjugation round (app.js startConjRound). Both reuse drillCell, so every form is the one the
+// drills already verify, and both are filled by tapping into a small table (the fill-multi mechanism):
+//   conj-row     "je … tu … il … nous … vous … ils …" for one verb in one tense
+//   conj-across  "présent: je …, imparfait: je …, futur: je …" for one verb and one person
+const paradigmItems = [];
+{
+  const ROW_RUNGS = [   // [rung id, tense, how many verbs]
+    ['present-essentiel', 'pr', 12], ['present-er', 'pr', 8], ['present-irreguliers', 'pr', 8], ['passe-compose', 'pc', 8],
+    ['imparfait', 'im', 10], ['futur-simple', 'fu', 10], ['conditionnel', 'co', 10], ['subjonctif', 'su', 10],
+  ];
+  const rungIdx = (id) => LADDER.findIndex((r) => r.id === id);
+  const verbsFor = (rungId, n) => {
+    const seen = drillItems.filter((x) => x.rung === rungIdx(rungId));
+    return [...new Set(seen.map((x) => x.v))].slice(0, n * 3).map((vi) => ({ vi, w: WORDS[vi] })).sort((a, b) => a.w.r - b.w.r).slice(0, n);
+  };
+  const lineStart = (k) => (k ? '\n' : '');
+  // Two decoys that are real forms of the same verb but not answers here: for a whole tense, the same
+  // persons in OTHER tenses; for a person across tenses, OTHER persons in the same tenses.
+  const decoysFor = (w, answers, pool, n = 2) => shuffled([...new Set(pool)].filter((x) => x && x !== '-' && !answers.includes(x)), seeded('dc' + w.w + answers.join('')))
+    .slice(0, n);
+  for (const [rungId, tense, n] of ROW_RUNGS) {
+    for (const { vi, w } of verbsFor(rungId, n)) {
+      if (ASPIRATED_H.has(w.w) || IMPERSONAL.has(w.w)) continue;
+      const cells = [0, 1, 2, 3, 4, 5].map((s) => drillCell(w, tense, s, 0));
+      if (cells.some((c) => !c) || new Set(cells.map((c) => c.answer)).size < 3) continue;
+      const answers = cells.map((c) => c.answer);
+      const decoys = decoysFor(w, answers, ['pr', 'im', 'fu', 'co', 'su'].filter((t) => t !== tense).flatMap((t) => w.conj[t]));
+      if (decoys.length < 2) continue;
+      paradigmItems.push({
+        id: `cd/row/${w.w}/${tense}`, k: 'conj-row', v: vi, tense, rung: rungIdx(rungId),
+        segs: [...cells.map((c, k) => lineStart(k) + c.pron), ''], answers, bank: shuffled([...answers, ...decoys], seeded('rb' + w.w + tense)),
+        stageHint: LADDER[rungIdx(rungId)].stage,
+      });
+    }
+  }
+  // one person across the tenses: early (present, imperfect, future, conditional), then with the past and the subjunctive
+  const ACROSS = [['conditionnel', ['pr', 'im', 'fu', 'co'], 'a'], ['subjonctif', ['pr', 'pc', 'im', 'fu', 'co', 'su'], 'b']];
+  const verbs = [...new Set(drillItems.filter((x) => x.rung <= 2).map((x) => x.v))].map((vi) => ({ vi, w: WORDS[vi] })).sort((a, b) => a.w.r - b.w.r).slice(0, 24);
+  for (const [rungId, tenses, tag] of ACROSS) {
+    for (const { vi, w } of verbs) {
+      if (ASPIRATED_H.has(w.w) || IMPERSONAL.has(w.w)) continue;
+      for (const slot of [0, 2, 3]) {
+        if (tenses.includes('pc') && ETRE_VERBS.has(w.w)) continue;            // aller, venir… take être: the helper depends on who is speaking
+        const cells = tenses.map((t) => drillCell(w, t, slot, 0));
+        if (cells.some((c) => !c)) continue;
+        const answers = cells.map((c) => c.answer);
+        if (new Set(answers).size < answers.length) continue;              // two tenses with the same form here: ambiguous
+        const decoys = decoysFor(w, answers, tenses.filter((t) => t !== 'pc').flatMap((t) => [0, 1, 2, 3, 4, 5].filter((k) => k !== slot).map((k) => w.conj[t][k])));
+        if (decoys.length < 2) continue;
+        paradigmItems.push({
+          id: `cd/across/${w.w}/${slot}/${tag}`, k: 'conj-across', v: vi, slot, tenses, rung: rungIdx(rungId),
+          segs: [...cells.map((c, k) => lineStart(k) + TENSE_LABEL[tenses[k]][0] + ' : ' + c.pron), ''], answers, bank: shuffled([...answers, ...decoys], seeded('ab' + w.w + slot + tag)),
+          stageHint: LADDER[rungIdx(rungId)].stage,
+        });
+      }
+    }
+  }
+}
+items.push(...paradigmItems);
 // The lessons that teach each step, and the model verb each one shows.
 const LESSONS = await load('content/conjugation-lessons.mjs');
 const BUILDS = (await import(pathToFileURL(join(ROOT, 'content', 'conjugation-lessons.mjs')).href)).BUILDS;
@@ -904,6 +1005,11 @@ for (const [n, e] of exprDeck.entries()) {
   if (options.length < 3) continue;
   items.push({ id: `ex/${e.id}`, k: 'idiom-mean', x: n, options, level: 4, stageHint: e.i == null ? 2 : Math.max(1, stageOfRank(WORDS[e.i].r)) });
 }
+
+// ── 13d. dialogues ───────────────────────────────────────────────────────
+// One card per dialogue, scheduled like any other, but played on its own screen (never in a round).
+const DIALOGUES = await load('content/dialogues.mjs');
+DIALOGUES.forEach((d, n) => items.push({ id: `dlg/${d.id}`, k: 'dialogue', d: n, level: 4, stageHint: { A2: 1, 'A2+': 2, B1: 3 }[d.level] ?? 2 }));
 
 const conjTenses = Object.fromEntries(Object.entries(TENSE_LABEL).map(([k, [fr, en]]) => [k, { fr, en }]));
 const conjLadder = LADDER.map((rg, n) => ({ id: rg.id, title: rg.title, en: rg.en, why: rg.why, tenses: rg.tenses, stage: rg.stage, n: drillItems.filter((x) => x.rung === n).length,
@@ -1004,7 +1110,7 @@ const conj = {};
 for (const [i, w] of WORDS.entries()) if (w.conj && w.k === 'v') conj[i] = w.conj;
 const deck = {
   built: new Date().toISOString().slice(0, 10),
-  stages, words: wire, conj, conjLadder, conjTenses, expressions: exprDeck, endings: endingStats,
+  stages, words: wire, conj, conjLadder, conjTenses, expressions: exprDeck, dialogues: DIALOGUES, endings: endingStats,
   examples, grammar, notes, cues,
   canadian: canDeck.filter((c) => c.ok).map((c) => ({ ...c, ok: undefined, audio: c.audio ? { by: c.audio.by, place: c.audio.place, f: c.audio.f, p: pathOf(c.audio.mp3) } : undefined })),
   homophones: Object.fromEntries(Object.entries(HOMO).map(([k, v]) => [k, { point: v.point, tip: v.tip, words: v.words }])),

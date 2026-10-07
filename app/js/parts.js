@@ -119,7 +119,7 @@ export function exprCard(x, { head = true } = {}) {
   const parts = [
     head ? h('h3', {}, typo(x.fr), readBtn(x.fr)) : null,
     h('p', {}, h('b', {}, x.en), x.reg ? h('span', { class: 'reg' }, x.reg === 'fam' ? 'familier' : x.reg) : null),
-    h('p', { class: 'note' }, 'Word for word: ', h('i', {}, x.literal)),
+    h('p', { class: 'note' }, 'Word for word: ', h('b', {}, x.literal)),
     h('p', {}, x.note),
     x.ex ? sentenceBlock({ text: x.ex.t, eng: x.ex.e }) : null,
     h('p', { class: 'evidence' }, 'Le sens vient de Wiktionary (CC BY-SA) ; l’explication est de moi.'),
@@ -161,11 +161,11 @@ export function wordCard(i, { example = true, voices = true } = {}) {
 // Tap a word and it drops into the next empty blank; tap a placed word and it
 // goes back. A single blank checks as soon as it is filled; several wait for
 // "Vérifier", so a slip can be undone first.
-export function fillSentence({ segs, answers, bank, onChecked, label = null, hint = null, cap = false }) {
+export function fillSentence({ segs, answers, bank, onChecked, label = null, hint = null, cap = false, lines = false }) {
   const n = answers.length;
   const placed = new Array(n).fill(null);                // bank index per slot
   const slots = [], tiles = [];
-  const line = h('p', { class: 'sentence-fill' });
+  const line = h('p', { class: 'sentence-fill' + (lines ? ' lines' : '') });          // lines: one blank per line, like a table
   const bankEl = h('div', { class: 'bank' });
   const status = h('div', {});
   let locked = false;
@@ -259,13 +259,16 @@ export function choices(options, answer, onPick, { cls = '', render = null, pair
 
 // What comes after an answer, in one order every time: the verdict in words,
 // then the evidence, then the one button that moves you on.
-export function afterCard(kids, { onNext, ok = null, answer = null }) {
+// `say`: the correct answer IN FRENCH, read aloud after a wrong answer when read-aloud is on (default: `answer`,
+// which is already French for most questions; where it is an English meaning the question passes `say`).
+// `wrong`: treat as wrong for reading even when no verdict is shown (a speaking question the learner rated "not yet").
+export function afterCard(kids, { onNext, ok = null, answer = null, say = null, wrong = false }) {
   const verdict = ok === null ? null : h('p', { class: 'verdict ' + (ok ? 'right' : 'wrong'), role: 'status' },
     h('span', { class: 'mark', 'aria-hidden': 'true' }, ok ? '✓' : '✗'),
     h('span', {}, ok ? lab('right') : lab('notQuite'), !ok && answer ? h('span', { class: 'vans' }, h('b', {}, typo(answer))) : null));
   const el = h('div', { class: 'after' }, verdict, ok === false ? reassurance() : null, ...[].concat(kids).filter(Boolean),
     h('div', { class: 'dock' }, h('button', { class: 'btn primary wide', type: 'button', onclick: () => { cancelReading(); onNext(); } }, lab('next'))));
-  readFeedback(el);
+  readFeedback(el, { wrong: ok === false || wrong, say: say ?? answer });
   return el;
 }
 

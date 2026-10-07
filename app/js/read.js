@@ -119,20 +119,30 @@ export function autoRead(card, { listening = false } = {}) {
   }
 }
 
-// After an answer: the verdict, the right answer, the sentence and its translation.
-export function readFeedback(after) {
-  if (!S().readFeedback || !after) return;
+// After an answer. Two things, kept apart:
+//   - whenever read-aloud is on (any mode) and the answer was WRONG: the correct answer, in French,
+//     and nothing else (the learner wants to hear it, not a lecture);
+//   - only if "read the answer too" is on: also the verdict, the note, and the sentence with its translation.
+export function readFeedback(after, { wrong = false, say = null } = {}) {
+  if (!after) return;
+  const full = !!S().readFeedback;
+  const sayWrong = wrong && !!say && readMode() !== 'off';
+  if (!full && !sayWrong) return;
   const out = [];
-  const v = after.querySelector('.verdict .lab');
-  if (v) out.push({ text: mainOf(v), lang: getMode() === 'en' ? 'en' : 'fr', pause: 300 });
-  const ans = after.querySelector('.vans');
-  if (ans) out.push({ text: txt(ans), lang: 'fr', pause: 350 });
-  const tip = after.querySelector('.tip.soft');
-  if (tip) out.push({ text: txt(tip), lang: 'en' });
-  for (const s of after.querySelectorAll('.sentence .fr-s')) out.push({ text: txt(s), lang: 'fr', pause: 300 });
-  for (const e of after.querySelectorAll('.sentence .en-s')) out.push({ text: txt(e), lang: 'en' });
-  const g = after.querySelector('.gpoint p');
-  if (g) out.push({ text: txt(g), lang: 'en' });
+  if (full) {
+    const v = after.querySelector('.verdict .lab');
+    if (v) out.push({ text: mainOf(v), lang: getMode() === 'en' ? 'en' : 'fr', pause: 300 });
+  }
+  if (sayWrong) out.push({ text: String(say).replace(/\s*!$/, ''), lang: 'fr', pause: 350 });   // the correct answer, in French
+  else if (full && after.querySelector('.vans') && say) out.push({ text: txt(after.querySelector('.vans')), lang: 'fr', pause: 350 });
+  if (full) {
+    const tip = after.querySelector('.tip.soft');
+    if (tip) out.push({ text: txt(tip), lang: 'en' });
+    for (const s of after.querySelectorAll('.sentence .fr-s')) out.push({ text: txt(s), lang: 'fr', pause: 300 });
+    for (const e of after.querySelectorAll('.sentence .en-s')) out.push({ text: txt(e), lang: 'en' });
+    const g = after.querySelector('.gpoint p');
+    if (g) out.push({ text: txt(g), lang: 'en' });
+  }
   if (out.length) setTimeout(() => speakQueue(out), 250);
 }
 

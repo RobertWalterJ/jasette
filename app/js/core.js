@@ -2,7 +2,7 @@
 // Shared by the home screen, the round and the browsing screens.
 
 import { State, cardState, isHolding, newLeftToday, dayKey, now, DAY } from './schedule.js';
-import { D, stageState, askableIds, SKILL, SKILLS, drillIds } from './deck.js';
+import { D, stageState, askableIds, SKILL, SKILLS, drillIds, isDrill } from './deck.js';
 import { canPlayAnything } from './audio.js';
 import { BANDS } from './placement.js';
 
@@ -153,7 +153,7 @@ export function skillStats() {
     const sk = SKILL[it.k];
     if (!sk) continue;
     const c = State.card(it.id);
-    if (it.k === 'conj-drill' && !c) continue;                 // reported on the Conjugaison screen, not as thousands of unopened grammar questions
+    if ((isDrill(it) || it.k === 'dialogue') && !c) continue;                 // reported on the Conjugaison screen, not as thousands of unopened grammar questions
     const reach = it.stage == null ? cur >= d.stages.length : it.stage <= cur;
     if (reach || c) stats[sk].total++;
     if (c) {

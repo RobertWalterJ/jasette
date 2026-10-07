@@ -15,7 +15,7 @@ import { initSpeech, unlock, onSpeaking, frVoiceInfo, frAvailable } from './spee
 import { loadAudioIndex, onAudio, stopAudio } from './audio.js';
 import { storageCard } from './storage.js';
 import { State, Round, cardState, dayKey, newLeftToday, now, DAY, shuffle } from './schedule.js';
-import { loadDeck, indexDeck, D, SKILL, allIds } from './deck.js';
+import { loadDeck, indexDeck, D, SKILL, allIds, PARADIGM_KINDS } from './deck.js';
 import { t, sub, setMode, setUi, resetFade, fadeStats } from './strings.js';
 import { press as tick, right as correct, wrong, setSound as setSoundOn } from './sound.js';
 import { asrSupported } from './asr.js';
@@ -255,6 +255,7 @@ function homeScreen() {
         !first ? h('button', { class: 'link', type: 'button', style: 'display:block;margin:12px auto 0', onclick: guideSheet }, 'How it works · Comment ça marche') : null,
         run > 1 ? h('p', { class: 'note', style: 'margin:12px 0 0' }, h('span', { html: ICON.flame, style: 'display:inline-flex;width:16px;vertical-align:-3px;color:var(--accent2)' }), ` ${run} ${t('daysRun')}`) : null),
       first ? welcomeCard() : null,
+      !first ? speakCard() : null,
       !first ? conjCard() : null,
       installCard(),
       !frAvailable() ? h('section', { class: 'card flat' }, h('p', { class: 'note' }, 'Ce téléphone n’a pas de voix française. Les mots et phrases enregistrés se jouent quand même ; les autres questions d’écoute sont mises de côté.')) : null,
@@ -308,12 +309,54 @@ function startRound(opts = {}) {
 // daily allowance (newC), the lowest rung first.
 function startConjRound(opts = {}) {
   unlock();
-  const ids = conjIds();
+  const all = conjIds();
+  const ids = all.filter((id) => !PARADIGM_KINDS.has(D().byId.get(id)?.k));      // single forms: the round proper
   const round = new Round(ids, {
     ...opts, exclude: session.asked, pace: conjPace(), newKey: 'newC', capNew: true, groupOf: D().groupOf, stageOf: (id) => D().byId.get(id)?.rung, size: conjSize(opts),
   });
   if (round.empty) { show('empty'); return; }
+  if (!opts.practice) addParadigms(round, all);
   show('round', { round, practice: !!opts.practice, conj: true });
+}
+// One or two "shape" questions in every conjugation round: a whole tense across the persons
+// (je, tu, il, nous, vous, ils), and, once the learner has met several tenses, one person across the
+// tenses (présent, passé, imparfait, futur, conditionnel, subjonctif). Due ones first, then new ones
+// from the step the learner is on, and never more new than today's conjugation allowance has room for.
+function addParadigms(round, all) {
+  const cs = conjState();
+  const inRound = new Set(round.queue);
+  const room = newLeftToday(conjPace(), 'newC') - round.queue.filter((id) => !State.card(id)).length;
+  const pool = all.map((id) => D().byId.get(id)).filter((it) => PARADIGM_KINDS.has(it.k) && !session.asked.has(it.id) && !inRound.has(it.id));
+  const due = new Set(State.dueIds(pool.filter((it) => State.card(it.id)).map((it) => it.id)));
+  const best = (kind) => pool.filter((it) => it.k === kind && (due.has(it.id) || (!State.card(it.id) && room > 0)))
+    .sort((a, b) => (due.has(b.id) - due.has(a.id)) || Math.abs(a.rung - cs.current) - Math.abs(b.rung - cs.current) || a.id.localeCompare(b.id))[0];
+  const picks = [best('conj-row'), best('conj-across')].filter(Boolean);
+  const n = round.queue.length;
+  picks.forEach((it, k) => round.queue.splice(Math.min(round.queue.length, Math.floor(((k + 1) * n) / (picks.length + 1))), 0, it.id));
+}
+// ── Parler: a session of speaking questions only ──────────────────────────
+// Another voice says a French sentence (a real recording, when there is one), and as soon as it ends the
+// phone starts listening to the learner, shows what it hears, and marks the words. The learner still moves
+// on by pressing the button; nothing here is timed.
+const SPEAK_KINDS = new Set(['sentence-repeat', 'sentence-say', 'word-say']);
+const speakIds = () => inPlay().ids.filter((id) => SPEAK_KINDS.has(D().byId.get(id)?.k));
+function startSpeakRound(opts = {}) {
+  unlock();
+  if (noSpeaking()) { toast('Turn off “Not out loud” on the home screen to practise speaking.'); return; }
+  const ids = speakIds();
+  const round = new Round(ids, { ...opts, exclude: session.asked, pace: pace(), groupOf: D().groupOf, stageOf: (id) => D().byId.get(id)?.stage, size: 10 });
+  if (round.empty) { show('empty'); return; }
+  show('round', { round, practice: !!opts.practice, speak: true });
+}
+function speakCard() {
+  const n = speakIds().length;
+  const listening = asrSupported() && State.data.settings.asr === true;
+  return h('section', { class: 'card' },
+    h('p', { class: 'eyebrow' }, 'Parler'),
+    h('div', { class: 'dayword' }, h('div', { style: 'flex:1;min-width:0' },
+      h('div', { class: 'w' }, 'Écoute et répète'),
+      h('div', { class: 'note' }, listening ? 'A speaker says a sentence, then the phone listens to you and marks the words.' : 'A speaker says a sentence, then you say it back. (Let the phone listen the first time it asks, and it will mark you.)')),
+      h('button', { class: 'btn', type: 'button', 'aria-label': 'Parler', disabled: !n, onclick: () => startSpeakRound() }, h('span', { html: ICON.mic, style: 'display:inline-flex;width:20px' }))));
 }
 function emptyScreen() {
   return [header('Série'), h('main', {}, h('section', { class: 'card' },
@@ -326,7 +369,7 @@ let inRound = false;
 function roundScreen(arg) {
   // A round lives in memory. Arriving here without one (the back button, a reload) means starting fresh.
   if (!arg?.round) return emptyScreen();
-  const { round, practice, conj = false } = arg;
+  const { round, practice, conj = false, speak = false } = arg;
   inRound = true;
   const box = h('main', { class: 'round' });
   const prog = h('i');
@@ -349,7 +392,7 @@ function roundScreen(arg) {
   const summary = () => {
     const after = course();
     const passed = after.current > stageBefore ? after.stages[stageBefore] : null;
-    const ids = conj ? conjIds() : inPlay().ids;
+    const ids = conj ? conjIds() : speak ? speakIds() : inPlay().ids;
     const left = conj
       ? new Round(ids, { practice, exclude: session.asked, pace: conjPace(), newKey: 'newC', capNew: true, groupOf: D().groupOf, stageOf: (id) => D().byId.get(id)?.rung, size: conjSize({ practice }) })
       : new Round(ids, { practice, exclude: session.asked, pace: pace(), groupOf: D().groupOf, stageOf: (id) => D().byId.get(id)?.stage, size: sitting().size });
@@ -360,7 +403,7 @@ function roundScreen(arg) {
       newToday.size ? h('p', {}, `${newToday.size} mot${newToday.size === 1 ? '' : 's'} nouveau${newToday.size === 1 ? '' : 'x'} : `, h('b', { class: 'fr' }, [...newToday].slice(0, 12).map(typo).join(' · '))) : null,
       h('p', { class: 'note' }, bySkill),
       passed ? h('div', { class: 'gpoint' }, h('p', { class: 'eyebrow' }, t('passed')), h('p', {}, `${passed.title} : ${passed.can}`), after.stages[after.current] ? h('p', { class: 'note' }, `Ensuite : ${after.stages[after.current].title}.`) : null) : null,
-      left.empty ? h('p', { class: 'note' }, nextDueLine(State.nextDue(ids))) : h('button', { class: 'btn primary wide', type: 'button', style: 'margin-top:12px', onclick: () => (conj ? startConjRound({ practice }) : startRound({ practice })) }, t('again')),
+      left.empty ? h('p', { class: 'note' }, nextDueLine(State.nextDue(ids))) : h('button', { class: 'btn primary wide', type: 'button', style: 'margin-top:12px', onclick: () => (conj ? startConjRound({ practice }) : speak ? startSpeakRound({ practice }) : startRound({ practice })) }, t('again')),
       h('button', { class: 'btn ghost wide', type: 'button', style: 'margin-top:10px', onclick: leave }, t('done')));
   };
 
@@ -383,7 +426,7 @@ function roundScreen(arg) {
       paint();
     };
     const showQuestion = () => {
-      box.replaceChildren(renderQuestion(it, { onAnswer, onNext: ask, practice }));
+      box.replaceChildren(renderQuestion(it, { onAnswer, onNext: ask, practice, speak }));
       window.scrollTo(0, 0);
       paint();
     };
@@ -514,7 +557,7 @@ function settingsScreen() {
       row(t('voice'), 'Quelle voix joue d’abord pour les mots. « Les deux » alterne : on entend le français des deux côtés.', seg('voice', [['qc', t('voiceQc')], ['fr', t('voiceFr')], ['both', t('voiceBoth')]])),
       row(t('sound'), 'De petits sons quand tu réponds.', toggle('sound', s.sound !== false, (v) => setSoundOn(v))),
       row(t('speakOn'), 'Si tu coupes, les questions où tu dois parler sont mises de côté.', toggle('quietOff', !s.quiet, (v) => { s.quiet = !v; State.save(); })),
-      asrSupported() ? row('Laisser le téléphone vérifier ce que je dis', 'Active la reconnaissance vocale du navigateur : ta voix est alors envoyée au fabricant du navigateur pour être transcrite — la seule chose de cette app qui quitte ton téléphone. Désactivé par défaut.', toggle('asr', s.asr === true)) : null,
+      asrSupported() ? row('Laisser le téléphone vérifier ce que je dis', 'Active la reconnaissance vocale du navigateur : ta voix est alors envoyée au fabricant du navigateur pour être transcrite — la seule chose de cette app qui quitte ton téléphone. L’app te le demande la première fois qu’une question te fait parler.', toggle('asr', s.asr === true)) : null,
       h('p', { class: 'note', style: 'margin-top:10px' }, `Voix du téléphone — Québec : ${vi.qc || 'aucune (la voix de France est utilisée)'} · France : ${vi.fr || 'aucune'}.`)),
     h('section', { class: 'card' },
       h('h2', { style: 'font-size:1.2rem;margin-bottom:8px' }, lab('rhythm')),
@@ -593,6 +636,7 @@ async function boot() {
       const bad = [];
       let n = 0;
       for (const k of window.J.kinds()) {
+        if (k === 'dialogue') continue;                       // played on its own screen (not built yet)
         for (const it of D().items.filter((i) => i.k === k).slice(0, per)) {
           window.J.ask(it.id); await new Promise((r) => setTimeout(r, 120));
           const card = document.querySelector('.qcard'); n++;

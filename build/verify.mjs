@@ -160,6 +160,8 @@ export async function verify(deck, src) {
       case 'qc-mean': case 'qc-pick': case 'qc-listen': case 'qc-oral': ok(!!deck.canadian[it.q], `${it.id}: no such Canadian entry`); break;
       case 'note-pick': ok(deck.noteById ? true : deck.notes.some((n) => n.id === it.nid), `${it.id}: no such note`); break;
       case 'sentence-listen': ok(it.options.length === 3 && !it.options.includes(it.eng), `${it.id}: needs three other translations`); break;
+      case 'sentence-repeat': ok(it.audio === 1 && !!it.by, `${it.id}: a repeat-after-me sentence must be a recording with a named speaker`); break;
+      case 'sentence-say': ok(!!it.eng && it.text.split(/\s+/).length >= 3 && it.text.split(/\s+/).length <= 9, `${it.id}: a say-it sentence needs its English and three to nine written words`); break;
     }
   }
   // conj items: the form is in the verb's table, in the tense claimed, and the distractors are the verb's own
@@ -229,6 +231,40 @@ export async function verify(deck, src) {
         if (etreV) pp = it.slot === 2 ? (who === 'elle' ? pp + 'e' : pp) : who === 'elles' ? pp + 'es' : (/[sx]$/.test(pp) ? pp : pp + 's');
         ok(parts[1] === pp, `${it.id}: the participle should be "${pp}" and agree with "${who}"`);
       }
+    }
+    // whole paradigms: a tense across the persons, a person across the tenses. Every form is re-derived
+    // from the verb's table (and, for the passé composé, from the helper's own row), every line carries
+    // the right pronoun, and the bank holds exactly the answers and two decoys.
+    const formOf = (c, w, tense, slot) => (SIMPLE.includes(tense) ? c[tense][slot] : tense === 'pc' ? `${row('avoir', 'pr')[slot]} ${c.pp}` : null);
+    for (const it of deck.items.filter((x) => x.k === 'conj-row' || x.k === 'conj-across')) {
+      const w = deck.words[it.v], c = deck.conj[it.v];
+      ok(!!w && w.k === 'v' && !!c, `${it.id}: not a verb`);
+      if (!w || !c) continue;
+      const acr = it.k === 'conj-across';
+      const tenses = acr ? it.tenses : Array(6).fill(it.tense);
+      ok(it.answers.length === 6 || (acr && it.answers.length === tenses.length), `${it.id}: the wrong number of lines`);
+      ok(it.segs.length === it.answers.length + 1 && it.segs.at(-1) === '', `${it.id}: the lines and the answers do not line up`);
+      ok(!tenses.includes('pc') || (!ETRE.has(w.w) && w.aux === 'avoir'), `${it.id}: a passé composé table for a verb that can take either helper`);
+      for (const [k, a] of it.answers.entries()) {
+        const slot = acr ? it.slot : k;
+        ok(formOf(c, w, tenses[k], slot) === a, `${it.id}: line ${k + 1} should be "${formOf(c, w, tenses[k], slot)}", not "${a}"`);
+        let line = it.segs[k].replace(/^\n/, '');
+        if (acr) { const lab = `${deck.conjTenses[tenses[k]].fr} : `; ok(line.startsWith(lab), `${it.id}: line ${k + 1} does not name its tense`); line = line.slice(lab.length); }
+        const subj = tenses[k] === 'su';
+        const vowel = /^[aeiouyàâäéèêëîïôöùûüœæh]/i.test(a);
+        const allowed = PRON[slot].map((p) => {
+          if (!subj) return p === 'je' ? (vowel ? ['j’'] : ['je ']) : p === 'j’' ? [] : [p + ' '];
+          if (p === 'je') return vowel ? ['que j’'] : ['que je '];
+          if (p === 'j’') return [];
+          return /^(il|elle|on|ils|elles)$/.test(p) ? ['qu’' + p + ' '] : ['que ' + p + ' '];
+        }).flat();
+        ok(allowed.includes(line), `${it.id}: line ${k + 1} has the pronoun "${line}", wrong for person ${slot}`);
+      }
+      ok(new Set(it.answers).size >= (acr ? it.answers.length : 3), `${it.id}: its lines are not distinct enough to be a question`);
+      // the bank is the answers (a form can repeat: je suis, tu suis) plus two decoys that are not answers
+      const left = [...it.bank];
+      const hasAll = it.answers.every((a) => { const at = left.indexOf(a); if (at < 0) return false; left.splice(at, 1); return true; });
+      ok(hasAll && left.length === 2 && new Set(left).size === 2 && left.every((x) => !it.answers.includes(x)), `${it.id}: the bank must hold the answers and two different decoys`);
     }
   }
   for (const it of deck.items.filter((x) => x.k === 'aux-pick')) {
@@ -307,6 +343,46 @@ export async function verify(deck, src) {
     }
   }
 
+  // Dialogues: each of your lines has one natural reply and two others, every word of every line but a
+  // deliberate error is a French spelling, each Québec word named is one the course already backs, and
+  // the steps it leans on are real steps of the ladder.
+  {
+    const dlgs = deck.dialogues || [];
+    ok(dlgs.length >= 3, `only ${dlgs.length} dialogues reached the deck`);
+    ok(deck.items.filter((q) => q.k === 'dialogue').length === dlgs.length, 'the dialogue items and the dialogues differ in number');
+    ok(new Set(dlgs.map((d) => d.id)).size === dlgs.length, 'two dialogues share an id');
+    const qcOk = new Set(src.CANADIAN.map((e) => norm(e.qc)));
+    const ladderIds = new Set((deck.conjLadder || []).map((r) => r.id));
+    const spellOk = (text, id) => {
+      const qcWords = new Set();
+      for (const q of qcOk) for (const w of q.split(/[^a-zàâäæçéèêëîïôöœùûüÿ']+/)) qcWords.add(w);
+      for (const word of norm(text).split(/[^a-zàâäæçéèêëîïôöœùûüÿ']+/).flatMap((x) => (x.includes("'") ? x.split(/(?<=')/) : [x])).filter(Boolean)) {
+        const w2 = word.replace(/'$/, '');
+        ok(!!SPELL[word] || !!SPELL[w2] || (src.ORTHO && src.ORTHO.has(w2)) || qcWords.has(w2) || /^[a-z]'$/.test(word), `dialogue ${id}: "${word}" is not a French spelling Lexique knows`);
+      }
+    };
+    for (const d of dlgs) {
+      ok(typeof d.title === 'string' && d.title && ['A2', 'A2+', 'B1', 'B2'].includes(d.level), `dialogue ${d.id}: no title or a strange level`);
+      ok((d.needs || []).every((n) => ladderIds.has(n)), `dialogue ${d.id}: it leans on a step that is not on the ladder`);
+      ok((d.qc || []).every((w) => qcOk.has(norm(w))), `dialogue ${d.id}: a Québec word it names is not one of the course's backed entries`);
+      ok(!!d.spotlight?.title && (d.spotlight?.text || '').length > 60, `dialogue ${d.id}: no pattern spotlight`);
+      ok(d.lines.length >= 5 && d.lines.filter((l) => l.who === 'you').length >= 2, `dialogue ${d.id}: too short`);
+      for (const [k, l] of d.lines.entries()) {
+        const where = `dialogue ${d.id} line ${k + 1}`;
+        if (l.who === 'other') { ok(!!l.fr && !!l.en, `${where}: a line needs French and English`); spellOk(l.fr, d.id); continue; }
+        ok(l.who === 'you' && !!l.best && Array.isArray(l.others) && l.others.length === 2, `${where}: your line needs one natural reply and two others`);
+        if (!l.best || !l.others) continue;
+        const all = [l.best.fr, ...l.others.map((o) => o.fr)];
+        ok(new Set(all).size === 3, `${where}: the three replies must differ`);
+        ok(l.best.why?.length > 15 && l.others.every((o) => o.why?.length > 15), `${where}: every reply needs its reason`);
+        ok(l.others.every((o) => ['register', 'other', 'error'].includes(o.kind)), `${where}: a reply has an unknown kind`);
+        ok(l.others.some((o) => o.kind === 'error'), `${where}: one reply should be a real learner error`);
+        spellOk(l.best.fr, d.id);
+        for (const o of l.others) if (o.kind !== 'error') spellOk(o.fr, d.id);
+      }
+    }
+  }
+
   // ── the course ─────────────────────────────────────────────────────────
   ok(deck.stages.length === SYLLABUS.length, 'the number of stages differs from the syllabus');
   for (const [n, st] of deck.stages.entries()) {
@@ -379,6 +455,7 @@ async function sources() {
     HAND: await load('content/glosses.mjs'), SYLLABUS: await load('content/syllabus.mjs'), NOTES: await load('content/notes.mjs'), HOMO: await load('content/homophones.mjs'),
     CANADIAN: await load('content/canadian.mjs'), GRAMMAR: await load('content/grammar.mjs'),
     EXPR: await load('content/expressions.mjs'), EXPR_SRC: existsSync(join(ROOT, 'corpus/expressions-src.json')) ? read('corpus/expressions-src.json') : {},
+    DIALOGUES: await load('content/dialogues.mjs'),
     LADDER: await load('content/conjugation.mjs'), LESSONS: await load('content/conjugation-lessons.mjs'),
     BUILDS: (await import(pathToFileURL(join(ROOT, 'content/conjugation-lessons.mjs')).href)).BUILDS,
     STRINGS: (await import(pathToFileURL(join(ROOT, 'app/js/strings.js')).href)).STRINGS,

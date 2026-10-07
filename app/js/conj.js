@@ -56,6 +56,19 @@ export function modelRows(vi, tense) {
 }
 export const elide = withPronoun;
 
+// What a whole-paradigm question showed, completed, as read aloud: "je suis. tu es. il est…"
+export const paradigmText = (it) => it.segs.map((s, k) => `${s}${it.answers[k] || ''}`.trim()).join('. ');
+
+// After a whole-tense or across-the-tenses question: the table, correct, in the order it was asked.
+export function paradigmAfter(it) {
+  const d = D();
+  const w = d.words[it.v];
+  const inf = w.d || w.w;
+  const rows = it.segs.slice(0, -1).map((s, k) => [s.trim().replace(/\s*$/, ''), it.answers[k]]);
+  const title = it.k === 'conj-row' ? `${typo(inf)} · ${d.conjTenses[it.tense].fr}` : `${typo(inf)} · ${PERSON[it.slot]}, à travers les temps`;
+  return h('div', { class: 'gpoint' }, h('h3', {}, title), h('p', { class: 'note' }, w.g), ctable(rows));
+}
+
 // The pattern behind an answer.
 export function conjAfter(it) {
   const d = D();
