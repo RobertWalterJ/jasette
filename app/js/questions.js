@@ -137,7 +137,10 @@ function wordSay(it, ctx) {
 // word by word and handed back to the learner, because a recogniser built for native speakers
 // misses learners often. Without recognition it is a flashcard the learner marks, said plainly.
 function speakFlow(ctx, { target, word = false, reveal, rateLabels = null }) {
+  // `controls` is rebuilt (the consent card, then the Say button); `out` holds the result and the Next button and
+  // must NEVER be rebuilt, or the result of a spoken answer is drawn into a detached node and the learner is stranded.
   const wrap = h('div', {});
+  const controls = h('div', {});
   const out = h('div', {});
   const lang = () => (voicePref() === 'fr' ? 'fr-FR' : 'fr-CA');
   const labels = rateLabels || [t('iKnewIt'), t('notYet')];
@@ -152,12 +155,12 @@ function speakFlow(ctx, { target, word = false, reveal, rateLabels = null }) {
     x.hit ? h('span', { class: 'heard' }, typo(x.show)) : h('span', { class: 'miss' }, typo(x.show), h('span', { class: 'sr-only' }, ' (not heard)'))]));
 
   const build = () => {
-    wrap.replaceChildren();
+    controls.replaceChildren();
     const noAsr = asrSupported() ? null : 'This browser cannot listen, so you will mark yourself.';
     const asked = S().asr !== undefined;
     // the first time: say what listening costs, and ask
     if (asrSupported() && !asked) {
-      wrap.append(h('div', { class: 'gpoint' },
+      controls.append(h('div', { class: 'gpoint' },
         h('h3', {}, 'Let the phone listen?'),
         h('p', {}, 'To check what you say, your phone sends a short recording of your voice to the browser’s maker (Google, if you use Chrome) to turn it into text. Jasette does not keep it. You can turn this off any time in Réglages.'),
         h('p', { class: 'note' }, 'It is built for native speakers, so it will sometimes mishear you. When it is not sure, you decide.'),
@@ -198,17 +201,17 @@ function speakFlow(ctx, { target, word = false, reveal, rateLabels = null }) {
           v === 'hit' ? null : h('p', { class: 'note' }, 'A recogniser built for native speakers misses learners often, so you decide: did you say it?')));
         if (v === 'hit') { done(ctx, true); out.append(afterCard([], ctx)); } else out.append(selfRate(null));
       };
-      wrap.append(say, live, skip);
+      controls.append(say, live, skip);
     } else {
       const btn = h('button', { class: 'btn primary wide', type: 'button', onclick: () => {
         btn.remove(); showAnswer();
         out.append(selfRate(noAsr || 'Only you can hear whether it was right, so you mark it. Letting the phone listen is in Réglages.'));
       } }, t('showMe'));
-      wrap.append(btn);
+      controls.append(btn);
     }
   };
+  wrap.append(controls, out);
   build();
-  wrap.append(out);
   // speaking mode: open the microphone for the learner (only if they have let the phone listen)
   wrap.autoStart = () => { if (asrSupported() && S().asr === true) wrap.querySelector('.btn.primary')?.click(); };
   return wrap;

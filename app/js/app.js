@@ -668,6 +668,49 @@ async function boot() {
       }
       return { checked: D().dialogues.length, problems: bad };
     };
+    // J.speak(): the whole speaking path, with a fake recogniser, starting from a first-time learner who has
+    // not yet answered the 'let the phone listen?' card. Every ending (heard it, nearly, not it, silence, no
+    // recognition) must leave a way to go on: a Next button. (A learner was once stranded here.)
+    window.J.speak = async () => {
+      const bad = [];
+      const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+      const saved = { sr: window.SpeechRecognition, wsr: window.webkitSpeechRecognition, asr: State.data.settings.asr };
+      let heard = null;
+      class Fake { start() { setTimeout(() => this.onresult?.({ results: [Object.assign([{ transcript: 'x' }], { isFinal: false })] }), 20);
+        setTimeout(() => { if (heard === null) { this.onerror?.({ error: 'no-speech' }); return; } this.onresult?.({ results: [Object.assign(heard.map((t) => ({ transcript: t })), { isFinal: true })] }); this.onend?.(); }, 60); } stop() { setTimeout(() => this.onend?.(), 5); } }
+      window.SpeechRecognition = Fake; window.webkitSpeechRecognition = Fake;
+      const say = () => [...document.querySelectorAll('.qcard .btn.primary')].find((b) => /Dis-le|Say it/.test(b.textContent));
+      const next = () => [...document.querySelectorAll('.after .dock button')].find((b) => /./.test(b.textContent));
+      const kinds = ['sentence-say', 'sentence-repeat', 'word-say'];
+      for (const kind of kinds) {
+        const it = D().items.find((i) => i.k === kind);
+        const target = kind === 'word-say' ? D().words[it.i].w : it.text;
+        const scenarios = [['perfect', [target], false], ['nearly', [target.split(' ').slice(0, -1).join(' ') || 'xx'], true], ['wrong', ['tout autre chose'], true], ['silence', null, true]];
+        for (const [name, say_, rates] of scenarios) {
+          for (const consent of [true, false]) {
+            if (consent) delete State.data.settings.asr; else State.data.settings.asr = true;
+            heard = say_;
+            window.J.ask(it.id); await wait(250);
+            const tag = `${kind} / ${name} / ${consent ? 'first time (consent card)' : 'already allowed'}`;
+            if (consent) { const yes = [...document.querySelectorAll('.choice')].find((b) => /Yes, listen/.test(b.textContent)); if (!yes) { bad.push(tag + ': no consent card'); continue; } yes.click(); await wait(100); }
+            const b = say(); if (!b) { bad.push(tag + ': no Say button'); continue; }
+            b.click(); await wait(400);
+            if (rates || !next()) { const r = document.querySelector('.qcard .choices.two .choice'); if (r) { r.click(); await wait(100); } }
+            if (!next()) bad.push(tag + ': no way to go on (no Next button)');
+          }
+        }
+      }
+      // no recognition at all: show the answer, rate yourself, go on
+      State.data.settings.asr = false;
+      for (const kind of kinds) { window.J.ask(D().items.find((i) => i.k === kind).id); await wait(200);
+        [...document.querySelectorAll('.qcard .btn.primary')].find((b) => /Montre|Show me/.test(b.textContent))?.click(); await wait(100);
+        document.querySelector('.qcard .choices.two .choice')?.click(); await wait(100);
+        if (!next()) bad.push(kind + ' / no recognition: no way to go on'); }
+      window.SpeechRecognition = saved.sr; window.webkitSpeechRecognition = saved.wsr;
+      if (saved.asr === undefined) delete State.data.settings.asr; else State.data.settings.asr = saved.asr;
+      State.save();
+      return { problems: bad };
+    };
     window.J.teach = () => {
       const bad = [];
       let n = 0;
