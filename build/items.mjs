@@ -394,6 +394,58 @@ const REPEAT_PER_STAGE = 50, SAY_PER_STAGE = 40;
   }
 }
 
+// ── 3d. "which sentence is correct?" from the OQLF's Banque de dépannage linguistique ──
+// Source: Office québécois de la langue française, Données Québec, CC BY-NC-SA 4.0 (build/oqlf-src.mjs).
+// The file is a list of sentences labelled grammatical (1) or ungrammatical (0), each filed under the page
+// of the language bank that explains the rule. A question is one correct sentence and the two WRONG
+// sentences from the same page that look most like it, so the learner has to see the one difference. The
+// rule itself is the OQLF's page, linked after the answer; the app does not reword it.
+{
+  const file = join(ROOT, 'sources', 'oqlf', 'bdl-phrases.csv');
+  if (existsSync(file)) {
+    const { parseCsv, toObjects } = await import(pathToFileURL(join(ROOT, 'build', 'lib', 'csv.mjs')).href);
+    const rows = toObjects(parseCsv(readFileSync(file, 'utf8')));
+    const okSentence = (s) => s.length >= 18 && s.length <= 110 && !/[()\[\]/<>]/.test(s) && s.split(/\s+/).length >= 4 && s.split(/\s+/).length <= 15;
+    const pages = new Map();
+    for (const r of rows) {
+      if (!okSentence(r.phrase)) continue;
+      if (!pages.has(r.source)) pages.set(r.source, { g: [], u: [] });
+      (r.etiquette === '1' ? pages.get(r.source).g : pages.get(r.source).u).push(r.phrase);
+    }
+    const bag = (s) => new Set(tokens(s));
+    const sim = (a, b) => { const A = bag(a), B = bag(b); let i = 0; for (const x of A) if (B.has(x)) i++; return i / (A.size + B.size - i || 1); };
+    const textStage = (s) => {
+      const ranks = tokens(s).map((t) => { const l = lemmaOf(t); const i = l ? wordIndex.get(l[0]) : null; return i == null ? null : WORDS[i].r; }).filter((r) => r != null).sort((a, b) => b - a);
+      return Math.max(2, stageOfRank(ranks[Math.min(1, ranks.length - 1)] ?? 1500));       // reading these is B1 and up
+    };
+    const cands = [];
+    for (const [url, p] of pages) {
+      if (p.g.length < 1 || p.u.length < 2) continue;
+      let best = null;
+      for (const g of p.g) {
+        const ranked = p.u.map((u) => ({ u, s: sim(g, u) })).sort((a, b) => b.s - a.s);
+        const two = ranked.filter((x, k) => ranked.findIndex((y) => y.u === x.u) === k).slice(0, 2);
+        if (two.length < 2) continue;
+        const score = two[0].s + two[1].s;
+        if (!best || score > best.score) best = { g, bad: two.map((x) => x.u), score };
+      }
+      if (!best) continue;
+      const path = url.replace('https://vitrinelinguistique.oqlf.gouv.qc.ca/', '').split('/');
+      cands.push({ url, id: path[0], cat: path[1] || '', sub: path[2] || '', slug: path[path.length - 1], ...best });
+    }
+    // balanced across the language bank's own sections, so it is not all homophones
+    const byCat = new Map();
+    for (const c of cands) { if (!byCat.has(c.cat)) byCat.set(c.cat, []); byCat.get(c.cat).push(c); }
+    const lists = [...byCat.entries()].sort((a, b) => a[0].localeCompare(b[0])).map(([k, l]) => shuffled(l, seeded('oq' + k)));
+    const chosen = [];
+    for (let n = 0; chosen.length < 320 && n < 400; n++) for (const l of lists) if (l[n] && chosen.length < 320) chosen.push(l[n]);
+    for (const c of chosen) {
+      const rnd = seeded('oqo' + c.id);
+      items.push({ id: `oq/${c.id}`, k: 'oqlf-correct', text: c.g, options: shuffled(c.bad, rnd), src: c.url.replace('https://vitrinelinguistique.oqlf.gouv.qc.ca/', ''), cat: c.cat, sub: c.sub, slug: c.slug, level: 5, stageHint: textStage(c.g) });
+    }
+  }
+}
+
 // ── 4. gender: un or une ─────────────────────────────────────────────────
 // Only for nouns Lexique and Wiktionary agree about.
 const endings = { f: GP.get('gender').endings.f, m: GP.get('gender').endings.m };

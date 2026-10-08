@@ -41,6 +41,8 @@ const cases = [
   ['a matching game with two ambiguous meanings', (d) => { const it = d.items[firstOf('match-pairs')]; d.words[it.ws[1]].g = d.words[it.ws[0]].g; }, /share a meaning/],
   ['a culture note whose source does not say it', (d) => {}, /does not contain/, (s) => ({ ...s, WIKI: { ...s.WIKI, Joual: { ...s.WIKI.Joual, text: 'An empty article.' } } })],
   ['a culture note naming an unbacked Québec word', (d) => {}, /not a backed entry/, (s) => ({ ...s, CULTURE: s.CULTURE.map((n, k) => (k === 6 ? { ...n, qc: ['zzzzz'] } : n)) })],
+  ['an OQLF question whose right answer the OQLF calls wrong', (d) => { const it = d.items[firstOf('oqlf-correct')]; const t = it.text; it.text = it.options[0]; it.options[0] = t; }, /not labelled grammatical/],
+  ['an OQLF question with a wrong option from another rule', (d) => { const a = d.items[firstOf('oqlf-correct')]; const b = d.items[d.items.findIndex((x, k) => x.k === 'oqlf-correct' && k > firstOf('oqlf-correct'))]; a.options[0] = b.options[0]; }, /not labelled ungrammatical/],
   ['a sentence that is not Tatoeba\'s', (d) => { const it = d.items[firstOf('word-cloze')]; it.text += ' zzz'; }, /text differs|blank/],
   ['a recording that does not exist', (d) => { const it = d.items[firstOf('word-cloze', (x) => !x.audio)]; it.audio = 1; }, /recorded|licence/],
   ['an option that is the answer', (d) => { const it = d.items[firstOf('word-read')]; it.options[0] = d.words[it.i].g; }, /also an option|shares a meaning|repeat/],

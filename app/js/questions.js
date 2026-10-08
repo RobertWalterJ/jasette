@@ -43,6 +43,7 @@ function renderKind(it, ctx) {
     case 'conj-row': case 'conj-across': return conjParadigm(it, ctx);
     case 'idiom-mean': return idiomMean(it, ctx);
     case 'match-pairs': return matchPairs(it, ctx);
+    case 'oqlf-correct': return oqlfCorrect(it, ctx);
     case 'aux-pick': return gapSingle(it, ctx, { key: 'pAux', cue: (q) => `${t('pAux')} ${q.participle}` });
     case 'agree-pick': return gapSingle(it, ctx, { key: 'pAgree' });
     case 'pronoun-pick': return gapSingle(it, ctx, { key: 'pPronoun' });
@@ -262,6 +263,32 @@ function gapSingle(it, ctx, { key, cue = null }) {
         ], { ...ctx, ok, answer: it.answer }));
       },
     }));
+  return c;
+}
+
+// ── 5a-00. which sentence is correct? (the OQLF's language bank) ──────────
+// Three sentences, one correct according to the Office québécois de la langue française. The sentences and
+// the verdicts are the OQLF's (CC BY-NC-SA 4.0); the rule is its own page, linked after the answer, and
+// not reworded here. The section (spelling, anglicisms, grammar…) is shown; the rule's title is not,
+// because it would give the answer away.
+const OQLF_SECTION = {
+  lorthographe: 'L’orthographe', 'le-vocabulaire': 'Le vocabulaire', 'les-emprunts-a-langlais': 'Les emprunts à l’anglais', 'la-grammaire': 'La grammaire',
+  'la-syntaxe': 'La syntaxe', 'les-abreviations-et-les-symboles': 'Les abréviations et les symboles', 'la-redaction-et-la-communication': 'La rédaction et la communication',
+  'la-typographie': 'La typographie', 'la-ponctuation': 'La ponctuation', 'banque-de-depannage-linguistique': 'Banque de dépannage linguistique',
+  'les-noms-propres': 'Les noms propres', 'la-prononciation': 'La prononciation',
+};
+function oqlfCorrect(it, ctx) {
+  const c = card('writing', prompt('pOqlf'), h('p', { class: 'note' }, 'Selon l’Office québécois de la langue française'),
+    h('p', { class: 'cue' }, OQLF_SECTION[it.cat] || it.cat.replace(/-/g, ' ')));
+  c.append(choices(it.options, it.text, (ok) => {
+    done(ctx, ok);
+    c.append(afterCard([
+      h('div', { class: 'gpoint' },
+        h('p', {}, 'The correct sentence is the one that follows the OQLF’s rule. The rule is explained on its language-bank page:'),
+        h('p', {}, h('a', { href: 'https://vitrinelinguistique.oqlf.gouv.qc.ca/' + it.src, target: '_blank', rel: 'noopener' }, 'Read the rule on the OQLF’s site')),
+        h('p', { class: 'evidence' }, 'Phrases : Office québécois de la langue française, Banque de dépannage linguistique (CC BY-NC-SA 4.0).')),
+    ], { ...ctx, ok, say: it.text }));
+  }, { cls: 'fr-c' }));
   return c;
 }
 

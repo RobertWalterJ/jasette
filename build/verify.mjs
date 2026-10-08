@@ -401,6 +401,23 @@ export async function verify(deck, src) {
     }
   }
 
+  // OQLF sentences: the correct one is labelled grammatical in the OQLF file, both others are labelled
+  // ungrammatical on the SAME rule page, and the three are different.
+  {
+    const oq = deck.items.filter((q) => q.k === 'oqlf-correct');
+    if (src.OQLF) {
+      const label = new Map();                                    // "page|sentence" -> label
+      for (const r of src.OQLF) label.set(r.source + '|' + r.phrase, r.etiquette);
+      ok(oq.length >= 100, `only ${oq.length} OQLF questions reached the deck`);
+      for (const it of oq) {
+        const page = 'https://vitrinelinguistique.oqlf.gouv.qc.ca/' + it.src;
+        ok(label.get(page + '|' + it.text) === '1', `${it.id}: the "correct" sentence is not labelled grammatical by the OQLF on its page`);
+        ok(it.options.length === 2 && new Set([it.text, ...it.options]).size === 3, `${it.id}: it needs the correct sentence and two different wrong ones`);
+        for (const o of it.options) ok(label.get(page + '|' + o) === '0', `${it.id}: a wrong option is not labelled ungrammatical by the OQLF on the same page`);
+      }
+    }
+  }
+
   // Matching pairs: five different plain words whose meanings cannot be confused with one another.
   for (const it of deck.items.filter((q) => q.k === 'match-pairs')) {
     ok(Array.isArray(it.ws) && it.ws.length === 5 && new Set(it.ws).size === 5, `${it.id}: a matching game needs five different words`);
@@ -482,6 +499,7 @@ async function sources() {
     CANADIAN: await load('content/canadian.mjs'), GRAMMAR: await load('content/grammar.mjs'),
     EXPR: await load('content/expressions.mjs'), EXPR_SRC: existsSync(join(ROOT, 'corpus/expressions-src.json')) ? read('corpus/expressions-src.json') : {},
     DIALOGUES: await load('content/dialogues.mjs'),
+    OQLF: existsSync(join(ROOT, 'sources/oqlf/bdl-phrases.csv')) ? (await import(pathToFileURL(join(ROOT, 'build/lib/csv.mjs')).href)).toObjects((await import(pathToFileURL(join(ROOT, 'build/lib/csv.mjs')).href)).parseCsv(readFileSync(join(ROOT, 'sources/oqlf/bdl-phrases.csv'), 'utf8'))) : null,
     CULTURE: await load('content/culture.mjs'),
     WIKI: existsSync(join(ROOT, 'corpus/culture-wikipedia.json')) ? read('corpus/culture-wikipedia.json') : {},
     LADDER: await load('content/conjugation.mjs'), LESSONS: await load('content/conjugation-lessons.mjs'),

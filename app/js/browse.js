@@ -223,6 +223,8 @@ export function aboutScreen() {
         src('Lexique 3.83', 'La fréquence de chaque mot (sous-titres de films et livres), les formes fléchies et le genre.', 'CC BY-SA 4.0', 'http://www.lexique.org'),
         src('Wiktionary (en anglais)', 'Les sens, étiquetés par région et par registre ; la prononciation (API) ; les tables de conjugaison. Via kaikki.org.', 'CC BY-SA 3.0 / 4.0', 'https://kaikki.org/dictionary/French/'),
         src('Tatoeba', 'Chaque phrase d’exemple et sa traduction, avec son auteur. Les enregistrements de phrases sont presque tous sous licence CC BY-NC(-ND) : gratuits, non modifiés, sans usage commercial.', 'CC BY 2.0 FR ; audio : voir chaque clip', 'https://tatoeba.org'),
+        src('OQLF : Banque de dépannage linguistique', 'Les phrases grammaticales et agrammaticales de la question « Laquelle est correcte ? », avec la page de règle de l’Office québécois de la langue française. Données ouvertes (Données Québec) ; usage non commercial, partage dans les mêmes conditions.', 'CC BY-NC-SA 4.0', 'https://donneesquebec.ca/recherche/dataset/donnees-linguistiques'),
+        src('Wikipedia (en anglais)', 'Les notes de la section Culture sont écrites avec les mots de l’app à partir d’articles nommés sous chaque note ; chaque affirmation clé est vérifiée contre l’article à la construction.', 'CC BY-SA 4.0', 'https://en.wikipedia.org'),
         src('Lingua Libre / Wikimedia Commons', 'Les voix des mots : un locuteur du Québec (Shawinigan) et des locuteurs de France (Paris, Lyon, Toulouse, Vosges), nommés sur chaque clip.', 'CC BY-SA 4.0', 'https://lingualibre.org')),
       h('section', { class: 'card' },
         h('p', { class: 'eyebrow' }, 'Ce que l’app ne peut pas faire'),

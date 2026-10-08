@@ -75,3 +75,27 @@ SIL Open Font License, self-hosted.
   behind an account and tens of gigabytes; worth revisiting for Québec sentence audio.
 - **Dictionnaire des francophones**: its regional labels would be a third source
   for the Canadian track; the public site is up but there is no open API.
+
+
+## Office québécois de la langue française: Banque de dépannage linguistique (added 2026-10-07)
+
+- **What:** about 25,000 sentences labelled grammatical or ungrammatical, each filed under the page of the OQLF's
+  language bank that explains the rule (spelling, vocabulary, anglicisms, grammar, syntax, typography…).
+- **Used for:** the *Laquelle est correcte ?* questions (320): one correct sentence and the two wrong ones from the
+  same rule page that look most like it. The rule is the OQLF's own page, linked after the answer; the app does not
+  reword it.
+- **From:** Données Québec, dataset *Données linguistiques et terminologiques tirées de la Vitrine linguistique*
+  (https://donneesquebec.ca/recherche/dataset/donnees-linguistiques), published by the Office québécois de la langue
+  française; data last updated 2026-07-10. Fetched by build/oqlf-src.mjs into sources/oqlf/ (not committed).
+- **Licence:** CC BY-NC-SA 4.0: attribution, **non-commercial**, share-alike. Jasette is a free personal app; the
+  deck's OQLF questions carry the same licence and the attribution on the About screen. Not for commercial use.
+- **Not used:** the OQLF's 20 MB set of full terminology cards, and its 1,470 official terms (mostly technical
+  vocabulary, e.g. 'sheepsfoot roller').
+- **Checked:** build/verify.mjs re-reads the OQLF file and fails if any question's right sentence is not labelled
+  grammatical on its page, or a wrong sentence is not labelled ungrammatical on the same page.
+
+## Wikipedia (culture notes)
+
+- **Used for:** the fourteen notes in the Culture section, written in the app's own words from named articles
+  (Quebec French, Joual, Quebec French profanity), text under CC BY-SA 4.0. Each note's key phrases are checked
+  against the saved article text (corpus/culture-wikipedia.json, with revision ids) when the app is built.

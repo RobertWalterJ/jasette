@@ -25,7 +25,7 @@ export const itemById = (id) => deck.byId.get(id);
 export const SKILL = {
   'word-listen': 'listening', 'sentence-listen': 'listening', 'sound-pair': 'listening', 'qc-listen': 'listening',
   'word-say': 'speaking', 'word-pick': 'speaking', 'sentence-repeat': 'speaking', 'sentence-say': 'speaking',
-  'word-read': 'reading', 'note-pick': 'reading', 'idiom-mean': 'reading', 'match-pairs': 'reading', 'dialogue': 'speaking',
+  'word-read': 'reading', 'note-pick': 'reading', 'idiom-mean': 'reading', 'match-pairs': 'reading', 'oqlf-correct': 'writing', 'dialogue': 'speaking',
   'spell-pick': 'writing', 'homophone-pick': 'writing',
   'word-cloze': 'grammar', 'fill-multi': 'grammar', 'gender-pick': 'grammar', 'conj-pick': 'grammar', 'conj-drill': 'grammar', 'conj-row': 'grammar', 'conj-across': 'grammar', 'aux-pick': 'grammar', 'agree-pick': 'grammar',
   'pronoun-pick': 'grammar', 'grammar-build': 'grammar',
