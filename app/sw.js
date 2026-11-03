@@ -152,7 +152,9 @@ self.addEventListener('fetch', (e) => {
     const c = await caches.open(VERSION);
     // The page: network first, so a new deploy arrives on the next open with signal.
     if (isPage) {
-      try { const res = await fetch(req); if (res.ok) c.put('index.html', res.clone()); return res; }
+      // Only the app's own entry page may replace the cached index.html, never some other address in scope.
+      const isHome = url.pathname === scope.pathname || url.pathname === scope.pathname + 'index.html';
+      try { const res = await fetch(req); if (res.ok && isHome) c.put('index.html', res.clone()); return res; }
       catch { return (await c.match('index.html')) || (await c.match('./')) || Response.error(); }
     }
     // Everything else is named by a content hash or never changes: cache first.
